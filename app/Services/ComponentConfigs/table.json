@@ -1,0 +1,31 @@
+{
+  "table": {
+    "pagination": "on",
+    "headers": "on",
+    
+    "FilterSection": {
+      "settings": {
+        "type": "submit"
+      },
+      "buttons": [
+        {
+          "type": "submit",
+          "color": "primary",
+          "icon": "magnifying-glass",
+          "variant": "contained"
+        },
+        {
+          "type": "Clear",
+          "label": "Clear",
+          "color": "secondary"
+        },
+        {
+          "type": "Close",
+          "label": "Close",
+          "color": "gray"
+        }
+      ],
+      "filters": "on"
+    }
+  }
+}

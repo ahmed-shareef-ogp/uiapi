@@ -1,0 +1,17 @@
+{
+    "listView": {
+        "components": {
+            "searchBar": {
+                "button": ["create", "edit"]
+            },
+            "table": {
+                "button": ["create", "edit"]
+            },
+            "FilterSection": {
+                "button": ["create", "edit"]
+            }
+        },
+        "columns": ["id ", "first_name_eng", "gender", "country_id"],
+        "lang": ["en", "dv"]
+    }
+}

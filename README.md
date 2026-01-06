@@ -21,39 +21,36 @@ Laravel is a web application framework with expressive, elegant syntax. We belie
 
 Laravel is accessible, powerful, and provides tools required for large, robust applications.
 
-## Learning Laravel
+## Internal Generic JSON API
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+This project includes a single, internal-only, schema-driven endpoint to query any Eloquent model dynamically without API Resources:
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+- Endpoint: `GET /api/data`
+- Parameters:
+	- `model`: Model name, e.g. `Entry`
+	- `columns`: Optional comma-separated subset, e.g. `id,ref_num`
+	- `filter[field]=value` or `filter[field][like]=text`
+	- `q`: Global search across model-declared searchable columns
+	- `sort`: Comma-separated fields; prefix with `-` for descending (e.g. `date_entry,-ref_num`)
+	- `page`, `per_page`: Pagination controls
+	- `with`: Comma-separated relations, supports nesting (`sender.person`)
+	- `include_meta`: `true|false` (column metadata included by default)
 
-## Laravel Sponsors
+Models must implement `apiSchema(): array` to declare columns, metadata, and searchable fields. See `app/Models/Entry.php` for an example and `app/Models/Concerns/ApiQueryable.php` for reusable helpers.
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+Response shape:
 
-### Premium Partners
+```
+{
+	"data": [...],
+	"meta": {
+		"columns": { "id": { "hidden": true, "type": "number" }, ... },
+		"pagination": { "current_page": 1, "last_page": 10, "per_page": 25, "total": 250 }
+	}
+}
+```
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
-
-## Contributing
-
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
-
-## Code of Conduct
-
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
-
-## Security Vulnerabilities
-
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
-
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Behavior notes:
+- By default, `data` includes only columns declared in the model's `apiSchema()['columns']` (including those marked `hidden: true`).
+- Supplying `columns=` limits further to the validated subset (intersection with `apiSchema` columns).
+- Relations serialize using their own model schema and include nested `meta.columns`.
