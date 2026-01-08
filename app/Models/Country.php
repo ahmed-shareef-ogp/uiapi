@@ -1,8 +1,8 @@
 <?php
 namespace App\Models;
 
-use App\Models\Person;
 use App\Models\Concerns\ApiQueryable;
+use App\Models\Person;
 use Illuminate\Database\Eloquent\Model;
 
 class Country extends Model
@@ -18,6 +18,7 @@ class Country extends Model
                     'key'            => 'id',
                     'label'          => ["dv" => "އައިޑީ", "en" => "Id"],
                     'type'           => 'number',
+                    'displayType'    => 'text',
 
                     'formField'      => true,
                     'fieldComponent' => 'textInput',
@@ -32,12 +33,13 @@ class Country extends Model
                 ],
 
                 'nationality_eng'     => [
-                    'hidden'     => false,
-                    'label'      => ["dv" => "ޤައުމިއްޔަތު", "en" => "Nationality"],
-                    'type'       => 'string',
+                    'hidden'      => false,
+                    'label'       => ["dv" => "ޤައުމިއްޔަތު", "en" => "Nationality"],
+                    'type'        => 'string',
+                    'displayType' => 'text',
 
-                    'sortable'   => true,
-                    'filterable' => [
+                    'sortable'    => true,
+                    'filterable'  => [
                         'type'  => 'select',
                         'label' => ["dv" => "ޤައުމިއްޔަތު", "en" => "Nationality"],
                         'value' => 'id',
@@ -45,12 +47,13 @@ class Country extends Model
                 ],
 
                 'nationality_div'     => [
-                    'hidden'     => false,
-                    'label'      => ["dv" => "ޤައުމިއްޔަތު", "en" => "Nationality"],
-                    'type'       => 'string',
+                    'hidden'      => false,
+                    'label'       => ["dv" => "ޤައުމިއްޔަތު", "en" => "Nationality"],
+                    'type'        => 'string',
+                    'displayType' => 'text',
 
-                    'sortable'   => true,
-                    'filterable' => [
+                    'sortable'    => true,
+                    'filterable'  => [
                         'type'  => 'select',
                         'label' => ["dv" => "ޤައުމިއްޔަތު", "en" => "Nationality"],
                         'value' => 'id',
@@ -58,12 +61,14 @@ class Country extends Model
                 ],
 
                 'name_eng'            => [
-                    'hidden' => false,
-                    'label'      => ["dv" => "ނަން", "en" => "Name"],
-                    'type'       => 'string',
+                    'hidden'        => false,
+                    'label'         => ["dv" => "ނަން", "en" => "Name"],
+                    'relationLabel' => ["dv" => "ގައުމު", "en" => "Country"],
+                    'type'          => 'string',
+                    'displayType'   => 'text',
 
-                    'sortable'   => true,
-                    'filterable' => [
+                    'sortable'      => true,
+                    'filterable'    => [
                         'type'  => 'select',
                         'label' => ["dv" => "ނަން", "en" => "Name"],
                         'value' => 'id',
@@ -71,12 +76,13 @@ class Country extends Model
                 ],
 
                 'name_div'            => [
-                    'hidden' => false,
-                    'label'      => ["dv" => "ނަން", "en" => "Name"],
-                    'type'       => 'string',
+                    'hidden'      => false,
+                    'label'       => ["dv" => "ނަން", "en" => "Name"],
+                    'type'        => 'string',
+                    'displayType' => 'text',
 
-                    'sortable'   => true,
-                    'filterable' => [
+                    'sortable'    => true,
+                    'filterable'  => [
                         'type'  => 'select',
                         'label' => ["dv" => "ނަން", "en" => "Name"],
                         'value' => 'id',
@@ -84,12 +90,13 @@ class Country extends Model
                 ],
 
                 'country_code_alpha3' => [
-                    'hidden' => false,
-                    'label'      => ["dv" => "ކޯޑު", "en" => "Alpha-3 Code"],
-                    'type'       => 'string',
+                    'hidden'      => false,
+                    'label'       => ["dv" => "ކޯޑު", "en" => "Alpha-3 Code"],
+                    'type'        => 'string',
+                    'displayType' => 'text',
 
-                    'sortable'   => true,
-                    'filterable' => [
+                    'sortable'    => true,
+                    'filterable'  => [
                         'type'  => 'select',
                         'label' => ["dv" => "ކޯޑު", "en" => "Alpha-3 Code"],
                         'value' => 'id',
@@ -97,12 +104,14 @@ class Country extends Model
                 ],
 
                 'created_at'          => [
-                    'hidden' => true,
-                    'type'   => 'datetime',
+                    'hidden'      => true,
+                    'type'        => 'datetime',
+                    'displayType' => 'text',
                 ],
                 'updated_at'          => [
-                    'hidden' => true,
-                    'type'   => 'datetime',
+                    'hidden'      => true,
+                    'type'        => 'datetime',
+                    'displayType' => 'text',
                 ],
             ],
             'searchable' => [

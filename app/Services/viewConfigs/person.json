@@ -8,10 +8,30 @@
                 "button": ["create", "edit"]
             },
             "FilterSection": {
-                "button": ["create", "edit"]
+                "button": ["create", "edit"],
+                "filters": ["gender", "country.name_eng"]
             }
         },
-        "columns": ["id ", "first_name_eng", "gender", "country_id"],
+
+        "columns": [
+            "country_id",
+            "id",
+            "country.name_eng",
+            "first_name_eng",
+            "first_name_div",
+            "gender",
+            "is_in_custody",
+            "date_of_birth"
+        ],
+        "labelOverrides": {
+            "first_name_eng": { "en": "TheFIRST Name", "dv": " ބަލާ މިނަމަށް" },
+            "country.name_eng": {
+                "en": "CustomeCountry",
+                "dv": "މީހާގެ ޤައުމު"
+            }
+        },
+        "filters": ["gender", "country_id"],
+        "per_page": 10,
         "lang": ["en", "dv"]
     }
 }

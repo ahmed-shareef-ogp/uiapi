@@ -2,23 +2,43 @@
 
 namespace App\Services;
 
-use Illuminate\Http\Request;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Str;
-use Illuminate\Support\Arr;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Str;
 
 class GenericApiService
 {
-    protected function loadComponentConfig(string $componentSettingsKey): array
+    protected bool $includeTopLevelHeaders = false;
+
+    protected bool $includeTopLevelFilters = false;
+
+    protected bool $includeTopLevelPagination = false;
+
+
+    protected bool $includeHiddenColumnsInHeaders = false;
+
+    protected function loadViewConfig(string $modelName): array
     {
-        $path = base_path('app/Services/ComponentConfigs/' . $componentSettingsKey . '.json');
-        if (!File::exists($path)) {
+        $path = base_path('app/Services/viewConfigs/'.Str::lower($modelName).'.json');
+        if (! File::exists($path)) {
             return [];
         }
         $json = File::get($path);
         $cfg = json_decode($json, true) ?: [];
+
+        return $cfg;
+    }
+
+    protected function loadComponentConfig(string $componentSettingsKey): array
+    {
+        $path = base_path('app/Services/ComponentConfigs/'.$componentSettingsKey.'.json');
+        if (! File::exists($path)) {
+            return [];
+        }
+        $json = File::get($path);
+        $cfg = json_decode($json, true) ?: [];
+
         return $cfg;
     }
 
@@ -35,6 +55,7 @@ class GenericApiService
         } elseif (is_string($label) && $label !== '') {
             return $label;
         }
+
         return Str::title(str_replace('_', ' ', $field));
     }
 
@@ -43,17 +64,66 @@ class GenericApiService
         return (string) ($columnDef['key'] ?? $field);
     }
 
+    protected function pickHeaderLangOverride(array $columnDef, string $requestLang): ?string
+    {
+        $langs = $columnDef['lang'] ?? [];
+        if (! is_array($langs)) {
+            return null;
+        }
+        $normalized = array_values(array_unique(array_map(fn ($l) => strtolower((string) $l), $langs)));
+        if (empty($normalized)) {
+            return null;
+        }
+        $current = strtolower($requestLang);
+        $candidates = array_values(array_filter($normalized, fn ($l) => $l !== $current));
+        if (in_array($current, $normalized, true)) {
+            // Column supports current lang; show an alternate if available
+            if (! empty($candidates)) {
+                // Prefer 'dv' if current is 'en', or 'en' if current is 'dv', else first
+                if ($current === 'en' && in_array('dv', $candidates, true)) {
+                    return 'dv';
+                }
+                if ($current === 'dv' && in_array('en', $candidates, true)) {
+                    return 'en';
+                }
+                return $candidates[0];
+            }
+            // Only one lang and it's the current one; nothing extra to show
+            return null;
+        }
+        // Current lang not supported; suggest a best available
+        if (in_array('en', $normalized, true)) {
+            return 'en';
+        }
+        if (in_array('dv', $normalized, true)) {
+            return 'dv';
+        }
+        return $normalized[0];
+    }
+
     protected function buildHeaders(array $columnsSchema, string $lang): array
     {
         $headers = [];
         foreach ($columnsSchema as $field => $def) {
-            $headers[] = [
+            $header = [
                 'title' => $this->labelFor($def, $field, $lang),
                 'value' => $this->keyFor($def, $field),
                 'sortable' => (bool) ($def['sortable'] ?? false),
                 'hidden' => (bool) ($def['hidden'] ?? false),
             ];
+            if (array_key_exists('type', $def)) {
+                $header['type'] = (string) $def['type'];
+            }
+            if (array_key_exists('displayType', $def)) {
+                $header['displayType'] = (string) $def['displayType'];
+            }
+            $override = $this->pickHeaderLangOverride($def, $lang);
+            if ($override !== null) {
+                $header['lang'] = $override;
+            }
+            $headers[] = $header;
         }
+
         return $headers;
     }
 
@@ -67,18 +137,22 @@ class GenericApiService
         if (array_key_exists('method', $settings) && is_string($settings['method'])) {
             $settingsOut['method'] = $settings['method'];
         }
+
         return [
             'settings' => $settingsOut,
             'buttons' => $tableCfg['Searchbar']['buttons'] ?? [],
         ];
     }
 
-    protected function buildFilters(array $columnsSchema, string $modelName, string $lang): array
+    protected function buildFilters(array $columnsSchema, string $modelName, string $lang, ?array $allowedFilters = null): array
     {
         $filters = [];
         foreach ($columnsSchema as $field => $def) {
+            if (is_array($allowedFilters) && ! in_array($field, $allowedFilters, true)) {
+                continue;
+            }
             $f = $def['filterable'] ?? null;
-            if (!$f || !is_array($f)) {
+            if (! $f || ! is_array($f)) {
                 continue;
             }
             $type = strtolower((string) ($f['type'] ?? 'search'));
@@ -98,29 +172,122 @@ class GenericApiService
                 'label' => $label,
             ];
             if ($type === 'select') {
+                $mode = strtolower((string) ($f['mode'] ?? 'self'));
                 $itemTitle = (string) ($f['itemTitle'] ?? $this->keyFor($def, $field));
                 $itemValue = (string) ($f['itemValue'] ?? $this->keyFor($def, $field));
-                $sourceModel = (string) ($f['sourceModel'] ?? $modelName);
                 $filter['itemTitle'] = $itemTitle;
                 $filter['itemValue'] = $itemValue;
-                // When sourcing from another model, validate against its schema using a field it actually has.
-                $paramField = ($sourceModel === $modelName) ? $field : $itemValue;
-                $filter['url'] = url("/api/{$sourceModel}/options/{$paramField}") . "?itemTitle={$itemTitle}&itemValue={$itemValue}&lang={$lang}";
+                if ($mode === 'self') {
+                    // No DB query: use schema-defined items
+                    $items = $f['items'] ?? [];
+                    if (is_array($items)) {
+                        $filter['items'] = array_values($items);
+                    } else {
+                        $filter['items'] = [];
+                    }
+                } else {
+                    // relation (or external) mode: provide URL for options endpoint
+                    $sourceModel = (string) ($f['sourceModel'] ?? $modelName);
+                    // When sourcing from another model, validate using a field it actually has.
+                    $paramField = ($sourceModel === $modelName) ? $field : $itemValue;
+                    $filter['url'] = url("/api/{$sourceModel}/options/{$paramField}")."?itemTitle={$itemTitle}&itemValue={$itemValue}&lang={$lang}";
+                }
             }
             $filters[] = $filter;
         }
+
         return $filters;
+    }
+
+    protected function resolveOverrideTitle(?array $labelOverrides, string $token, string $lang): ?string
+    {
+        if (! is_array($labelOverrides)) {
+            return null;
+        }
+        $entry = $labelOverrides[$token] ?? null;
+        if ($entry === null) {
+            return null;
+        }
+        if (is_array($entry)) {
+            return (string) ($entry[$lang] ?? $entry['en'] ?? reset($entry) ?? '');
+        }
+        if (is_string($entry) && $entry !== '') {
+            return $entry;
+        }
+
+        return null;
+    }
+
+    protected function buildSectionPayload(
+        array $node,
+        array $columnsSchema,
+        ?array $columnsSubsetNormalized,
+        string $lang,
+        $paginator,
+        string $modelName,
+        Model $modelInstance,
+        ?array $labelOverrides = null,
+        ?array $allowedFilters = null
+    ): array {
+        $out = [];
+        foreach ($node as $key => $val) {
+            if ($key === 'headers') {
+                if ($val === 'on') {
+                    $out['headers'] = $this->buildTopLevelHeaders($modelInstance, $columnsSchema, $columnsSubsetNormalized, $lang, $labelOverrides);
+                } else {
+                    $out['headers'] = $val;
+                }
+
+                continue;
+            }
+            if ($key === 'filters') {
+                if ($val === 'on') {
+                    $out['filters'] = $this->buildFilters($columnsSchema, $modelName, $lang, $allowedFilters);
+                } else {
+                    $out['filters'] = $val;
+                }
+
+                continue;
+            }
+            if ($key === 'pagination') {
+                if ($val === 'on') {
+                    $out['pagination'] = [
+                        'current_page' => $paginator->currentPage(),
+                        'last_page' => $paginator->lastPage(),
+                        'per_page' => $paginator->perPage(),
+                        'total' => $paginator->total(),
+                    ];
+                } else {
+                    $out['pagination'] = $val;
+                }
+
+                continue;
+            }
+            // Pass-through other settings as-is, recursing into arrays
+            if (is_array($val)) {
+                $out[$key] = $this->buildSectionPayload($val, $columnsSchema, $columnsSubsetNormalized, $lang, $paginator, $modelName, $modelInstance, $labelOverrides, $allowedFilters);
+            } else {
+                $out[$key] = $val;
+            }
+        }
+
+        return $out;
     }
 
     protected function resolveRelatedModel(Model $model, string $relation): ?Model
     {
-        if (!method_exists($model, $relation)) {
+        if (! method_exists($model, $relation)) {
             return null;
         }
-        try { $rel = $model->{$relation}(); } catch (\Throwable $e) { $rel = null; }
+        try {
+            $rel = $model->{$relation}();
+        } catch (\Throwable $e) {
+            $rel = null;
+        }
         if ($rel instanceof \Illuminate\Database\Eloquent\Relations\Relation) {
             return $rel->getRelated();
         }
+
         return null;
     }
 
@@ -140,6 +307,7 @@ class GenericApiService
                 return $field;
             }
         }
+
         // Fallback to id
         return 'id';
     }
@@ -152,18 +320,23 @@ class GenericApiService
         array $appliedFilters,
         ?string $q,
         array $searchable,
-        string $lang
+        string $lang,
+        ?array $allowedFilters = null
     ): array {
         $filters = [];
 
         foreach ($columnsSchema as $field => $def) {
             $f = $def['filterable'] ?? null;
-            if (!$f || !is_array($f)) {
+            if (! $f || ! is_array($f)) {
+                continue;
+            }
+
+            if (is_array($allowedFilters) && ! in_array($field, $allowedFilters, true)) {
                 continue;
             }
 
             // Respect columns selection: include only selected columns when subset provided
-            if (is_array($columnsSubsetNormalized) && !in_array($field, $columnsSubsetNormalized, true)) {
+            if (is_array($columnsSubsetNormalized) && ! in_array($field, $columnsSubsetNormalized, true)) {
                 continue;
             }
 
@@ -190,13 +363,13 @@ class GenericApiService
             $mode = strtolower((string) ($f['mode'] ?? 'self'));
 
             if ($mode === 'self') {
-                // Compute distinct items under current constraints
-                $qbuilder = $fqcn::query();
-                $fqcn::applyApiFilters($qbuilder, $appliedFilters, $columnsSchema);
-                $fqcn::applyApiSearch($qbuilder, $q, $searchable);
-                $qbuilder->select($field)->distinct()->orderBy($field, 'asc')->limit(20);
-                $items = $qbuilder->get()->map(fn($r) => $r->{$field})->values()->all();
-                $out['items'] = $items;
+                // No DB query: use schema-defined items
+                $items = $f['items'] ?? [];
+                if (is_array($items)) {
+                    $out['items'] = array_values($items);
+                } else {
+                    $out['items'] = [];
+                }
             } elseif ($mode === 'relation') {
                 $relationship = (string) ($f['relationship'] ?? '');
                 $related = $relationship ? $this->resolveRelatedModel($modelInstance, $relationship) : null;
@@ -207,7 +380,7 @@ class GenericApiService
                     $paramField = $itemValue;
                     $out['itemTitle'] = $itemTitle;
                     $out['itemValue'] = $itemValue;
-                    $out['url'] = url("/api/{$relatedBase}/options/{$paramField}") . "?itemTitle={$itemTitle}&itemValue={$itemValue}&lang={$lang}";
+                    $out['url'] = url("/api/{$relatedBase}/options/{$paramField}")."?itemTitle={$itemTitle}&itemValue={$itemValue}&lang={$lang}";
                 }
             }
 
@@ -217,49 +390,260 @@ class GenericApiService
         return $filters;
     }
 
+    protected function columnSupportsLang(array $def, string $lang): bool
+    {
+        $langs = $def['lang'] ?? null;
+        if (! is_array($langs)) {
+            return true;
+        }
+        $normalized = array_values(array_unique(array_map(fn ($l) => strtolower((string) $l), $langs)));
+        return in_array(strtolower($lang), $normalized, true);
+    }
+
+    protected function filterTokensByLangSupport(Model $modelInstance, array $columnsSchema, array $tokens, string $lang): array
+    {
+        $out = [];
+        foreach ($tokens as $token) {
+            if (Str::contains($token, '.')) {
+                [$first, $rest] = array_pad(explode('.', $token, 2), 2, null);
+                if (! $rest) {
+                    continue;
+                }
+                $relationName = null;
+                if (method_exists($modelInstance, $first)) {
+                    try {
+                        $relTest = $modelInstance->{$first}();
+                    } catch (\Throwable $e) {
+                        $relTest = null;
+                    }
+                    if ($relTest instanceof \Illuminate\Database\Eloquent\Relations\Relation) {
+                        $relationName = $first;
+                    }
+                }
+                if (! $relationName) {
+                    $camel = Str::camel($first);
+                    if (method_exists($modelInstance, $camel)) {
+                        try {
+                            $relTest = $modelInstance->{$camel}();
+                        } catch (\Throwable $e) {
+                            $relTest = null;
+                        }
+                        if ($relTest instanceof \Illuminate\Database\Eloquent\Relations\Relation) {
+                            $relationName = $camel;
+                        }
+                    }
+                }
+                if (! $relationName && Str::endsWith($first, '_id')) {
+                    $guess = Str::camel(substr($first, 0, -3));
+                    if (method_exists($modelInstance, $guess)) {
+                        try {
+                            $relTest = $modelInstance->{$guess}();
+                        } catch (\Throwable $e) {
+                            $relTest = null;
+                        }
+                        if ($relTest instanceof \Illuminate\Database\Eloquent\Relations\Relation) {
+                            $relationName = $guess;
+                        }
+                    }
+                }
+
+                if ($relationName) {
+                    $related = $modelInstance->{$relationName}()->getRelated();
+                    $relSchema = method_exists($related, 'apiSchema') ? $related->apiSchema() : [];
+                    $relColumns = $relSchema['columns'] ?? [];
+                    $relDef = $relColumns[$rest] ?? null;
+                    if ($relDef && $this->columnSupportsLang($relDef, $lang)) {
+                        $out[] = $token;
+                    }
+                }
+                continue;
+            }
+
+            $def = $columnsSchema[$token] ?? null;
+            if ($def && $this->columnSupportsLang($def, $lang)) {
+                $out[] = $token;
+            }
+        }
+
+        return $out;
+    }
+
+    protected function reorderRecord(array $record, array $orderedTokens): array
+    {
+        if (empty($orderedTokens)) {
+            return $record;
+        }
+        $out = [];
+        foreach ($orderedTokens as $token) {
+            if (array_key_exists($token, $record)) {
+                $out[$token] = $record[$token];
+            }
+        }
+        foreach ($record as $k => $v) {
+            if (! array_key_exists($k, $out)) {
+                $out[$k] = $v;
+            }
+        }
+
+        return $out;
+    }
+
     protected function buildTopLevelHeaders(
+        Model $modelInstance,
         array $columnsSchema,
         ?array $columnsSubsetNormalized,
-        string $lang
+        string $lang,
+        ?array $labelOverrides = null
     ): array {
         $fields = [];
-        if (is_array($columnsSubsetNormalized) && !empty($columnsSubsetNormalized)) {
-            foreach ($columnsSubsetNormalized as $token) {
-                if (is_string($token) && !Str::contains($token, '.')) {
-                    $fields[] = $token;
-                }
-            }
-            $fields = array_values(array_unique($fields));
+        if (is_array($columnsSubsetNormalized) && ! empty($columnsSubsetNormalized)) {
+            $fields = array_values(array_unique(array_filter(array_map(fn ($t) => is_string($t) ? $t : null, $columnsSubsetNormalized))));
         } else {
             $fields = array_keys($columnsSchema);
         }
 
+        // Language-gate headers to match data columns
+        $fields = $this->filterTokensByLangSupport($modelInstance, $columnsSchema, $fields, $lang);
+
         $headers = [];
-        foreach ($fields as $field) {
-            $def = $columnsSchema[$field] ?? null;
-            if (!$def) {
+        foreach ($fields as $token) {
+            $overrideTitle = $this->resolveOverrideTitle($labelOverrides, $token, $lang);
+
+            if (Str::contains($token, '.')) {
+                [$first, $rest] = array_pad(explode('.', $token, 2), 2, null);
+                if (! $rest) {
+                    continue;
+                }
+
+                $relationName = null;
+                if (method_exists($modelInstance, $first)) {
+                    try {
+                        $relTest = $modelInstance->{$first}();
+                    } catch (\Throwable $e) {
+                        $relTest = null;
+                    }
+                    if ($relTest instanceof \Illuminate\Database\Eloquent\Relations\Relation) {
+                        $relationName = $first;
+                    }
+                }
+                if (! $relationName) {
+                    $camel = Str::camel($first);
+                    if (method_exists($modelInstance, $camel)) {
+                        try {
+                            $relTest = $modelInstance->{$camel}();
+                        } catch (\Throwable $e) {
+                            $relTest = null;
+                        }
+                        if ($relTest instanceof \Illuminate\Database\Eloquent\Relations\Relation) {
+                            $relationName = $camel;
+                        }
+                    }
+                }
+                if (! $relationName && Str::endsWith($first, '_id')) {
+                    $guess = Str::camel(substr($first, 0, -3));
+                    if (method_exists($modelInstance, $guess)) {
+                        try {
+                            $relTest = $modelInstance->{$guess}();
+                        } catch (\Throwable $e) {
+                            $relTest = null;
+                        }
+                        if ($relTest instanceof \Illuminate\Database\Eloquent\Relations\Relation) {
+                            $relationName = $guess;
+                        }
+                    }
+                }
+
+                $relDef = null;
+                if ($relationName) {
+                    $related = $modelInstance->{$relationName}()->getRelated();
+                    $relSchema = method_exists($related, 'apiSchema') ? $related->apiSchema() : [];
+                    $relColumns = $relSchema['columns'] ?? [];
+                    $relDef = $relColumns[$rest] ?? null;
+                }
+
+                if (! $this->includeHiddenColumnsInHeaders && $relDef && (bool) ($relDef['hidden'] ?? false) === true) {
+                    continue;
+                }
+
+                $title = $overrideTitle;
+                if ($title === null) {
+                    if ($relDef) {
+                        $relLabel = $relDef['relationLabel'] ?? null;
+                        if (is_array($relLabel)) {
+                            $title = (string) ($relLabel[$lang] ?? $relLabel['en'] ?? $this->labelFor($relDef, $rest, $lang));
+                        } elseif (is_string($relLabel) && $relLabel !== '') {
+                            $title = $relLabel;
+                        } else {
+                            $title = $this->labelFor($relDef, $rest, $lang);
+                        }
+                    }
+                }
+                if ($title === null) {
+                    $title = Str::title(str_replace('_', ' ', $rest));
+                }
+
+                $header = [
+                    'title' => $title,
+                    'value' => $token,
+                    'sortable' => (bool) ($relDef['sortable'] ?? false),
+                    'hidden' => (bool) ($relDef['hidden'] ?? false),
+                ];
+                if ($relDef && array_key_exists('type', $relDef)) {
+                    $header['type'] = (string) $relDef['type'];
+                }
+                if ($relDef && array_key_exists('displayType', $relDef)) {
+                    $header['displayType'] = (string) $relDef['displayType'];
+                }
+                if ($relDef) {
+                    $override = $this->pickHeaderLangOverride($relDef, $lang);
+                    if ($override !== null) {
+                        $header['lang'] = $override;
+                    }
+                }
+                $headers[] = $header;
                 continue;
             }
-            $headers[] = [
-                'title' => $this->labelFor($def, $field, $lang),
-                'value' => $this->keyFor($def, $field),
+
+            $def = $columnsSchema[$token] ?? null;
+            if (! $def) {
+                continue;
+            }
+            if (! $this->includeHiddenColumnsInHeaders && (bool) ($def['hidden'] ?? false) === true) {
+                continue;
+            }
+            $header = [
+                'title' => $overrideTitle ?? $this->labelFor($def, $token, $lang),
+                'value' => $this->keyFor($def, $token),
                 'sortable' => (bool) ($def['sortable'] ?? false),
                 'hidden' => (bool) ($def['hidden'] ?? false),
             ];
+            if (array_key_exists('type', $def)) {
+                $header['type'] = (string) $def['type'];
+            }
+            if (array_key_exists('displayType', $def)) {
+                $header['displayType'] = (string) $def['displayType'];
+            }
+            $override = $this->pickHeaderLangOverride($def, $lang);
+            if ($override !== null) {
+                $header['lang'] = $override;
+            }
+            $headers[] = $header;
         }
 
         return $headers;
     }
+
     protected function resolveModel(string $modelName): ?array
     {
-        $fqcn = 'App\\Models\\' . $modelName;
-        if (!class_exists($fqcn)) {
+        $fqcn = 'App\\Models\\'.$modelName;
+        if (! class_exists($fqcn)) {
             return null;
         }
-        $instance = new $fqcn();
-        if (!method_exists($instance, 'apiSchema')) {
+        $instance = new $fqcn;
+        if (! method_exists($instance, 'apiSchema')) {
             return null;
         }
+
         return [$fqcn, $instance, $instance->apiSchema()];
     }
 
@@ -273,58 +657,71 @@ class GenericApiService
             foreach ($tokens as $token) {
                 if (Str::contains($token, '.')) {
                     [$first, $rest] = array_pad(explode('.', $token, 2), 2, null);
-                    if (!$rest) {
+                    if (! $rest) {
                         throw new \InvalidArgumentException("Invalid columns segment '$token'");
                     }
                     $relationName = null;
                     if (method_exists($model, $first)) {
-                        try { $relTest = $model->{$first}(); } catch (\Throwable $e) { $relTest = null; }
+                        try {
+                            $relTest = $model->{$first}();
+                        } catch (\Throwable $e) {
+                            $relTest = null;
+                        }
                         if ($relTest instanceof \Illuminate\Database\Eloquent\Relations\Relation) {
                             $relationName = $first;
                         }
                     }
                     // Support snake_case alias mapping to relation method (e.g., entry_type -> entryType)
-                    if (!$relationName) {
+                    if (! $relationName) {
                         $camel = Str::camel($first);
                         if (method_exists($model, $camel)) {
-                            try { $relTest = $model->{$camel}(); } catch (\Throwable $e) { $relTest = null; }
+                            try {
+                                $relTest = $model->{$camel}();
+                            } catch (\Throwable $e) {
+                                $relTest = null;
+                            }
                             if ($relTest instanceof \Illuminate\Database\Eloquent\Relations\Relation) {
                                 $relationName = $camel;
                             }
                         }
                     }
-                    if (!$relationName && Str::endsWith($first, '_id')) {
+                    if (! $relationName && Str::endsWith($first, '_id')) {
                         $guess = Str::camel(substr($first, 0, -3));
                         if (method_exists($model, $guess)) {
-                            try { $relTest = $model->{$guess}(); } catch (\Throwable $e) { $relTest = null; }
+                            try {
+                                $relTest = $model->{$guess}();
+                            } catch (\Throwable $e) {
+                                $relTest = null;
+                            }
                             if ($relTest instanceof \Illuminate\Database\Eloquent\Relations\Relation) {
                                 $relationName = $guess;
                             }
                         }
                     }
-                    if (!$relationName) {
+                    if (! $relationName) {
                         throw new \InvalidArgumentException("Unknown relation reference '$first' in columns");
                     }
                     $related = $model->{$relationName}()->getRelated();
-                    if (!method_exists($related, 'apiSchema')) {
+                    if (! method_exists($related, 'apiSchema')) {
                         throw new \InvalidArgumentException("Related model for '$relationName' lacks apiSchema()");
                     }
                     $relSchema = $related->apiSchema();
                     $relColumns = $relSchema['columns'] ?? [];
-                    if (!array_key_exists($rest, $relColumns)) {
+                    if (! array_key_exists($rest, $relColumns)) {
                         throw new \InvalidArgumentException("Column '$rest' is not defined in $relationName apiSchema");
                     }
                     // Preserve original alias for output keys; use relationName only for eager-loading
-                    $columnsSubsetNormalized[] = $first . '.' . $rest;
+                    $columnsSubsetNormalized[] = $first.'.'.$rest;
                     $relationsFromColumns[] = $relationName;
                 } else {
-                    if (!array_key_exists($token, $columnsSchema)) {
+                    if (! array_key_exists($token, $columnsSchema)) {
                         throw new \InvalidArgumentException("Column '$token' is not defined in apiSchema");
                     }
                     $columnsSubsetNormalized[] = $token;
                 }
             }
         }
+
         return [$columnsSubsetNormalized, array_unique($relationsFromColumns)];
     }
 
@@ -335,10 +732,10 @@ class GenericApiService
             $pairs = array_filter(array_map('trim', explode(',', $filter)));
             foreach ($pairs as $pair) {
                 [$field, $value] = array_pad(explode(':', $pair, 2), 2, null);
-                if (!$field || $value === null) {
+                if (! $field || $value === null) {
                     throw new \InvalidArgumentException("Invalid filter segment '$pair'");
                 }
-                if (!array_key_exists($field, $columnsSchema)) {
+                if (! array_key_exists($field, $columnsSchema)) {
                     throw new \InvalidArgumentException("Filter field '$field' is not defined in apiSchema");
                 }
                 if (Str::contains($value, '*')) {
@@ -348,6 +745,7 @@ class GenericApiService
                 }
             }
         }
+
         return $filters;
     }
 
@@ -358,11 +756,12 @@ class GenericApiService
             $sortTokens = array_filter(array_map('trim', explode(',', $sort)));
             foreach ($sortTokens as $tok) {
                 $field = ltrim($tok, '-');
-                if (!array_key_exists($field, $columnsSchema)) {
+                if (! array_key_exists($field, $columnsSchema)) {
                     throw new \InvalidArgumentException("Sort field '$field' is not defined in apiSchema");
                 }
             }
         }
+
         return $sortTokens;
     }
 
@@ -374,23 +773,58 @@ class GenericApiService
     protected function boolQuery(Request $req, string $key, bool $default = true): bool
     {
         $val = $req->query($key);
-        if ($val === null) return $default;
+        if ($val === null) {
+            return $default;
+        }
+
         return filter_var($val, FILTER_VALIDATE_BOOL);
     }
 
     public function index(Request $request, string $modelName)
     {
         $resolved = $this->resolveModel($modelName);
-        if (!$resolved) {
+        if (! $resolved) {
             return response()->json(['error' => "Model '$modelName' not found or missing apiSchema()"], 422);
         }
         [$fqcn, $modelInstance, $schema] = $resolved;
         $columnsSchema = $schema['columns'] ?? [];
         $searchable = $schema['searchable'] ?? [];
 
+        // Component is required for index
+        $componentParam = $request->query('component');
+        if (! $componentParam || ! is_string($componentParam) || $componentParam === '') {
+            return response()->json(['error' => 'component parameter is required'], 422);
+        }
+
+        // Resolve columns: query param takes precedence; otherwise read from view config JSON under the given component
+        $columnsParam = $request->query('columns');
+        $viewCfg = [];
+        if (! $columnsParam) {
+            $viewCfg = $this->loadViewConfig($modelName);
+            if (empty($viewCfg)) {
+                return response()->json(['error' => 'view config file missing for model'], 422);
+            }
+            if (! array_key_exists($componentParam, $viewCfg)) {
+                return response()->json(['error' => 'component key not found in view config'], 422);
+            }
+            $compBlock = $viewCfg[$componentParam] ?? [];
+            $compColumns = $compBlock['columns'] ?? [];
+            if (! is_array($compColumns) || empty($compColumns)) {
+                return response()->json(['error' => 'columns not defined in view config for component'], 422);
+            }
+            $columnsParam = implode(',', array_map('trim', $compColumns));
+        } else {
+            // When columns provided, still ensure the component exists in view config (as requested)
+            $viewCfg = $this->loadViewConfig($modelName);
+            if (empty($viewCfg) || ! array_key_exists($componentParam, $viewCfg)) {
+                return response()->json(['error' => 'component key not found in view config'], 422);
+            }
+            $compBlock = $viewCfg[$componentParam] ?? [];
+        }
+
         try {
             [$columnsSubsetNormalized, $relationsFromColumns] =
-                $this->normalizeColumnsSubset($modelInstance, $request->query('columns'), $columnsSchema);
+                $this->normalizeColumnsSubset($modelInstance, $columnsParam, $columnsSchema);
             $filters = $this->parseFilters($request->query('filter'), $columnsSchema);
             $sortTokens = $this->parseSorts($request->query('sort'), $columnsSchema);
         } catch (\InvalidArgumentException $e) {
@@ -399,15 +833,28 @@ class GenericApiService
 
         $with = $request->query('with');
         $relations = $this->parseWithRelations($fqcn, $modelInstance, $with);
-        if (!empty($relationsFromColumns)) {
+        if (! empty($relationsFromColumns)) {
             foreach ($relationsFromColumns as $rel) {
-                if (!in_array($rel, $relations, true)) {
+                if (! in_array($rel, $relations, true)) {
                     $relations[] = $rel;
                 }
             }
         }
 
         $includeMeta = $this->boolQuery($request, 'include_meta', true);
+        $lang = (string) ($request->query('lang') ?? 'dv');
+
+        // If view config declares supported languages and requested lang is not among them, return message with no data
+        $allowedLangs = $compBlock['lang'] ?? null;
+        if (is_array($allowedLangs)) {
+            $allowedNormalized = array_values(array_unique(array_map(fn ($l) => strtolower((string) $l), $allowedLangs)));
+            if (! in_array(strtolower($lang), $allowedNormalized, true)) {
+                return response()->json([
+                    'message' => "Language '$lang' not supported by view config",
+                    'data' => [],
+                ]);
+            }
+        }
 
         $query = $fqcn::query();
 
@@ -416,83 +863,118 @@ class GenericApiService
         $q = $request->query('q');
         $fqcn::applyApiSearch($query, $q, $searchable);
 
-        if (!empty($relations)) {
+        if (! empty($relations)) {
             $query->with($relations);
         }
 
         $fqcn::applyApiSorts($query, $sortTokens, $columnsSchema);
 
-        $perPage = (int) ($request->query('per_page', 25));
+        // per_page: use query param if present, else fallback to view config component's per_page
+        $perPage = (int) ($request->query('per_page') ?? ($compBlock['per_page'] ?? 25));
         $page = (int) ($request->query('page', 1));
 
         $paginator = $query->paginate($perPage, ['*'], 'page', $page);
 
+        // Filter selected columns by language support
+        $effectiveTokens = $this->filterTokensByLangSupport($modelInstance, $columnsSchema, $columnsSubsetNormalized ?? [], $lang);
+
         $records = [];
         foreach ($paginator->items() as $item) {
-            $records[] = $item->toApiRecord($columnsSubsetNormalized, $includeMeta);
+            $rec = $item->toApiRecord($effectiveTokens, $includeMeta);
+            $records[] = $this->reorderRecord($rec, $effectiveTokens);
         }
 
         // Build component settings from schema + component config file matching componentSettings key
-        $lang = (string) ($request->query('lang') ?? 'dv');
 
-        $component = (string) ($request->query('component') ?? 'listView');
+        $component = (string) $componentParam;
         $componentSettingsKey = (string) ($request->query('componentSettings') ?? 'table');
         $componentSettings = [];
 
         if ($componentSettingsKey === 'table') {
             // Load table.json dynamically only when requested
             $configFile = $this->loadComponentConfig($componentSettingsKey);
-            $sectionCfg = $configFile[$componentSettingsKey] ?? [];
-            $componentSettings['table'] = [];
-            // Headers toggle
-            if (($sectionCfg['headers'] ?? 'on') === 'on') {
-                $componentSettings['table']['headers'] = $this->buildHeaders($columnsSchema, $lang);
+            $labelOverrides = $compBlock['labelOverrides'] ?? null;
+            $allowedFilters = is_array($compBlock['filters'] ?? null) ? array_values($compBlock['filters']) : null;
+            if (isset($configFile[$componentSettingsKey]) && is_array($configFile[$componentSettingsKey])) {
+                $sectionCfg = $configFile[$componentSettingsKey];
+                $componentSettings['table'] = $this->buildSectionPayload(
+                    $sectionCfg,
+                    $columnsSchema,
+                    $effectiveTokens,
+                    $lang,
+                    $paginator,
+                    $modelName,
+                    $modelInstance,
+                    $labelOverrides,
+                    $allowedFilters
+                );
             }
-            // Searchbar: include settings/buttons as-is
-            $componentSettings['table']['Searchbar'] = $this->buildSearchbarSettings($sectionCfg, $modelName);
-            // Filters toggle
-            if (($sectionCfg['Searchbar']['filters'] ?? 'off') === 'on') {
-                $componentSettings['table']['Searchbar']['filters'] = $this->buildFilters($columnsSchema, $modelName, $lang);
-            }
-            // Pagination toggle
-            if (($sectionCfg['pagination'] ?? 'off') === 'on') {
-                $componentSettings['table']['pagination'] = [
-                    'current_page' => $paginator->currentPage(),
-                    'last_page' => $paginator->lastPage(),
-                    'per_page' => $paginator->perPage(),
-                    'total' => $paginator->total(),
-                ];
+            // Include any sibling sections (e.g., FilterSection) exactly mirroring config, with special keys transformed
+            foreach ($configFile as $sectionName => $sectionVal) {
+                if ($sectionName === $componentSettingsKey) {
+                    continue;
+                }
+                if (is_array($sectionVal)) {
+                    $componentSettings[$sectionName] = $this->buildSectionPayload(
+                        $sectionVal,
+                        $columnsSchema,
+                        $effectiveTokens,
+                        $lang,
+                        $paginator,
+                        $modelName,
+                        $modelInstance,
+                        $labelOverrides,
+                        $allowedFilters
+                    );
+                }
             }
         }
 
-        // Build top-level filters after data, based on selected columns (or all if none provided)
-        $topLevelFilters = $this->buildTopLevelFilters(
-            $fqcn,
-            $modelInstance,
-            $columnsSchema,
-            $columnsSubsetNormalized,
-            $filters,
-            $q,
-            $searchable,
-            $lang
-        );
+        // Conditionally build top-level headers and filters
+        $topLevelHeaders = null;
+        if ($this->includeTopLevelHeaders) {
+            $labelOverrides = $compBlock['labelOverrides'] ?? null;
+            $topLevelHeaders = $this->buildTopLevelHeaders($modelInstance, $columnsSchema, $effectiveTokens, $lang, $labelOverrides);
+        }
 
-        // Build top-level headers before filters
-        $topLevelHeaders = $this->buildTopLevelHeaders($columnsSchema, $columnsSubsetNormalized, $lang);
+        $topLevelFilters = null;
+        if ($this->includeTopLevelFilters) {
+            $allowedFilters = is_array($compBlock['filters'] ?? null) ? array_values($compBlock['filters']) : null;
+            $topLevelFilters = $this->buildTopLevelFilters(
+                $fqcn,
+                $modelInstance,
+                $columnsSchema,
+                $columnsSubsetNormalized,
+                $filters,
+                $q,
+                $searchable,
+                $lang,
+                $allowedFilters
+            );
+        }
 
-        return response()->json([
+        // Assemble response with conditional top-level keys in requested order
+        $response = [
             'data' => $records,
-            'headers' => $topLevelHeaders,
-            'filters' => $topLevelFilters,
-            'pagination' => [
+        ];
+        if ($topLevelHeaders !== null) {
+            $response['headers'] = $topLevelHeaders;
+        }
+        if ($topLevelFilters !== null) {
+            $response['filters'] = $topLevelFilters;
+        }
+        if ($this->includeTopLevelPagination) {
+            $response['pagination'] = [
                 'current_page' => $paginator->currentPage(),
                 'last_page' => $paginator->lastPage(),
                 'per_page' => $paginator->perPage(),
                 'total' => $paginator->total(),
-            ],
-            'component' => $component,
-            'componentSettings' => $componentSettings,
-        ]);
+            ];
+        }
+        $response['component'] = $component;
+        $response['componentSettings'] = $componentSettings;
+
+        return response()->json($response);
     }
 
     /**
@@ -501,32 +983,32 @@ class GenericApiService
     public function options(Request $request, string $modelName, string $field)
     {
         $resolved = $this->resolveModel($modelName);
-        if (!$resolved) {
+        if (! $resolved) {
             return response()->json(['error' => "Model '$modelName' not found or missing apiSchema()"], 422);
         }
         [$fqcn, $modelInstance, $schema] = $resolved;
         $columnsSchema = $schema['columns'] ?? [];
-        if (!array_key_exists($field, $columnsSchema)) {
+        if (! array_key_exists($field, $columnsSchema)) {
             return response()->json(['error' => "Field '$field' is not defined in apiSchema"], 422);
         }
 
         $itemTitle = (string) ($request->query('itemTitle') ?? $field);
         $itemValue = (string) ($request->query('itemValue') ?? $field);
         $limit = (int) ($request->query('limit') ?? 50);
-        $sort = in_array(strtolower((string) $request->query('sort')), ['asc','desc'], true) ? strtolower((string) $request->query('sort')) : 'asc';
+        $sort = in_array(strtolower((string) $request->query('sort')), ['asc', 'desc'], true) ? strtolower((string) $request->query('sort')) : 'asc';
 
         $query = $fqcn::query();
 
         // If title and value are same field, distinct list; else select pairs
         if ($itemTitle === $itemValue) {
             $query->select($itemValue)->distinct()->orderBy($itemValue, $sort)->limit($limit);
-            $rows = $query->get()->map(fn($r) => [
+            $rows = $query->get()->map(fn ($r) => [
                 'title' => $r->{$itemTitle},
                 'value' => $r->{$itemValue},
             ])->values()->all();
         } else {
             $query->select([$itemValue, $itemTitle])->distinct()->orderBy($itemTitle, $sort)->limit($limit);
-            $rows = $query->get()->map(fn($r) => [
+            $rows = $query->get()->map(fn ($r) => [
                 'title' => $r->{$itemTitle},
                 'value' => $r->{$itemValue},
             ])->values()->all();
@@ -538,50 +1020,85 @@ class GenericApiService
     public function show(Request $request, string $modelName, $id)
     {
         $resolved = $this->resolveModel($modelName);
-        if (!$resolved) {
+        if (! $resolved) {
             return response()->json(['error' => "Model '$modelName' not found or missing apiSchema()"], 422);
         }
         [$fqcn, $modelInstance, $schema] = $resolved;
         $columnsSchema = $schema['columns'] ?? [];
 
+        // Component required; use its columns when query 'columns' is absent
+        $componentParam = $request->query('component');
+        if (! $componentParam || ! is_string($componentParam) || $componentParam === '') {
+            return response()->json(['error' => 'component parameter is required'], 422);
+        }
+        $columnsParam = $request->query('columns');
+        $viewCfg = $this->loadViewConfig($modelName);
+        if (empty($viewCfg) || ! array_key_exists($componentParam, $viewCfg)) {
+            return response()->json(['error' => 'component key not found in view config'], 422);
+        }
+        if (! $columnsParam) {
+            $compBlock = $viewCfg[$componentParam] ?? [];
+            $compColumns = $compBlock['columns'] ?? [];
+            if (! is_array($compColumns) || empty($compColumns)) {
+                return response()->json(['error' => 'columns not defined in view config for component'], 422);
+            }
+            $columnsParam = implode(',', array_map('trim', $compColumns));
+        }
+
+        // Language support gate based on view config's declared languages
+        $lang = (string) ($request->query('lang') ?? 'dv');
+        $allowedLangs = ($viewCfg[$componentParam]['lang'] ?? null);
+        if (is_array($allowedLangs)) {
+            $allowedNormalized = array_values(array_unique(array_map(fn ($l) => strtolower((string) $l), $allowedLangs)));
+            if (! in_array(strtolower($lang), $allowedNormalized, true)) {
+                return response()->json([
+                    'message' => "Language '$lang' not supported by view config",
+                    'data' => [],
+                ]);
+            }
+        }
+
         try {
             [$columnsSubsetNormalized, $relationsFromColumns] =
-                $this->normalizeColumnsSubset($modelInstance, $request->query('columns'), $columnsSchema);
+                $this->normalizeColumnsSubset($modelInstance, $columnsParam, $columnsSchema);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['error' => $e->getMessage()], 422);
         }
 
         $with = $request->query('with');
         $relations = $this->parseWithRelations($fqcn, $modelInstance, $with);
-        if (!empty($relationsFromColumns)) {
+        if (! empty($relationsFromColumns)) {
             foreach ($relationsFromColumns as $rel) {
-                if (!in_array($rel, $relations, true)) {
+                if (! in_array($rel, $relations, true)) {
                     $relations[] = $rel;
                 }
             }
         }
 
         $query = $fqcn::query();
-        if (!empty($relations)) {
+        if (! empty($relations)) {
             $query->with($relations);
         }
         $model = $query->find($id);
-        if (!$model) {
+        if (! $model) {
             return response()->json(['error' => 'Not found'], 404);
         }
         $includeMeta = $this->boolQuery($request, 'include_meta', true);
-        $record = $model->toApiRecord($columnsSubsetNormalized, $includeMeta);
+        $effectiveTokensShow = $this->filterTokensByLangSupport($modelInstance, $columnsSchema, $columnsSubsetNormalized ?? [], (string) ($request->query('lang') ?? 'dv'));
+        $record = $model->toApiRecord($effectiveTokensShow, $includeMeta);
+        $record = $this->reorderRecord($record, $effectiveTokensShow);
         $meta = [];
         if ($includeMeta) {
             $meta['columns'] = $columnsSchema;
         }
+
         return response()->json(['data' => $record, 'meta' => $meta]);
     }
 
     public function store(Request $request, string $modelName)
     {
         $resolved = $this->resolveModel($modelName);
-        if (!$resolved) {
+        if (! $resolved) {
             return response()->json(['error' => "Model '$modelName' not found or missing apiSchema()"], 422);
         }
         [$fqcn, $model, $schema] = $resolved;
@@ -603,18 +1120,38 @@ class GenericApiService
 
         $with = $request->query('with');
         $relations = $this->parseWithRelations($fqcn, $model, $with);
-        if (!empty($relations)) {
+        if (! empty($relations)) {
             $model->load($relations);
         }
 
         $includeMeta = $this->boolQuery($request, 'include_meta', true);
+        // Component required; use its columns when query 'columns' is absent
+        $componentParam = $request->query('component');
+        if (! $componentParam || ! is_string($componentParam) || $componentParam === '') {
+            return response()->json(['error' => 'component parameter is required'], 422);
+        }
+        $columnsParam = $request->query('columns');
+        $viewCfg = $this->loadViewConfig($modelName);
+        if (empty($viewCfg) || ! array_key_exists($componentParam, $viewCfg)) {
+            return response()->json(['error' => 'component key not found in view config'], 422);
+        }
+        if (! $columnsParam) {
+            $compBlock = $viewCfg[$componentParam] ?? [];
+            $compColumns = $compBlock['columns'] ?? [];
+            if (! is_array($compColumns) || empty($compColumns)) {
+                return response()->json(['error' => 'columns not defined in view config for component'], 422);
+            }
+            $columnsParam = implode(',', array_map('trim', $compColumns));
+        }
         try {
-            [$columnsSubsetNormalized, ] = $this->normalizeColumnsSubset($model, $request->query('columns'), $columnsSchema);
+            [$columnsSubsetNormalized] = $this->normalizeColumnsSubset($model, $columnsParam, $columnsSchema);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['error' => $e->getMessage()], 422);
         }
 
-        $record = $model->toApiRecord($columnsSubsetNormalized, $includeMeta);
+        $effectiveTokensStore = $this->filterTokensByLangSupport($model, $columnsSchema, $columnsSubsetNormalized ?? [], (string) ($request->query('lang') ?? 'dv'));
+        $record = $model->toApiRecord($effectiveTokensStore, $includeMeta);
+        $record = $this->reorderRecord($record, $effectiveTokensStore);
         $meta = [];
         if ($includeMeta) {
             $meta['columns'] = $columnsSchema;
@@ -626,14 +1163,14 @@ class GenericApiService
     public function update(Request $request, string $modelName, $id)
     {
         $resolved = $this->resolveModel($modelName);
-        if (!$resolved) {
+        if (! $resolved) {
             return response()->json(['error' => "Model '$modelName' not found or missing apiSchema()"], 422);
         }
         [$fqcn, $modelInstance, $schema] = $resolved;
         $columnsSchema = $schema['columns'] ?? [];
 
         $model = $fqcn::query()->find($id);
-        if (!$model) {
+        if (! $model) {
             return response()->json(['error' => 'Not found'], 404);
         }
 
@@ -648,37 +1185,59 @@ class GenericApiService
 
         $with = $request->query('with');
         $relations = $this->parseWithRelations($fqcn, $model, $with);
-        if (!empty($relations)) {
+        if (! empty($relations)) {
             $model->load($relations);
         }
 
         $includeMeta = $this->boolQuery($request, 'include_meta', true);
+        // Component required; use its columns when query 'columns' is absent
+        $componentParam = $request->query('component');
+        if (! $componentParam || ! is_string($componentParam) || $componentParam === '') {
+            return response()->json(['error' => 'component parameter is required'], 422);
+        }
+        $columnsParam = $request->query('columns');
+        $viewCfg = $this->loadViewConfig($modelName);
+        if (empty($viewCfg) || ! array_key_exists($componentParam, $viewCfg)) {
+            return response()->json(['error' => 'component key not found in view config'], 422);
+        }
+        if (! $columnsParam) {
+            $compBlock = $viewCfg[$componentParam] ?? [];
+            $compColumns = $compBlock['columns'] ?? [];
+            if (! is_array($compColumns) || empty($compColumns)) {
+                return response()->json(['error' => 'columns not defined in view config for component'], 422);
+            }
+            $columnsParam = implode(',', array_map('trim', $compColumns));
+        }
         try {
-            [$columnsSubsetNormalized, ] = $this->normalizeColumnsSubset($model, $request->query('columns'), $columnsSchema);
+            [$columnsSubsetNormalized] = $this->normalizeColumnsSubset($model, $columnsParam, $columnsSchema);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['error' => $e->getMessage()], 422);
         }
 
-        $record = $model->toApiRecord($columnsSubsetNormalized, $includeMeta);
+        $effectiveTokensUpdate = $this->filterTokensByLangSupport($model, $columnsSchema, $columnsSubsetNormalized ?? [], (string) ($request->query('lang') ?? 'dv'));
+        $record = $model->toApiRecord($effectiveTokensUpdate, $includeMeta);
+        $record = $this->reorderRecord($record, $effectiveTokensUpdate);
         $meta = [];
         if ($includeMeta) {
             $meta['columns'] = $columnsSchema;
         }
+
         return response()->json(['data' => $record, 'meta' => $meta]);
     }
 
     public function destroy(Request $request, string $modelName, $id)
     {
         $resolved = $this->resolveModel($modelName);
-        if (!$resolved) {
+        if (! $resolved) {
             return response()->json(['error' => "Model '$modelName' not found or missing apiSchema()"], 422);
         }
-        [$fqcn, , ] = $resolved;
+        [$fqcn] = $resolved;
         $model = $fqcn::query()->find($id);
-        if (!$model) {
+        if (! $model) {
             return response()->json(['error' => 'Not found'], 404);
         }
         $model->delete();
+
         return response()->noContent();
     }
 }
