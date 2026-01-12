@@ -19,6 +19,7 @@ class Country extends Model
                     'label'          => ["dv" => "އައިޑީ", "en" => "Id"],
                     'type'           => 'number',
                     'displayType'    => 'text',
+                    'lang'           => ['en', 'dv'],
 
                     'formField'      => true,
                     'fieldComponent' => 'textInput',
@@ -37,6 +38,7 @@ class Country extends Model
                     'label'       => ["dv" => "ޤައުމިއްޔަތު", "en" => "Nationality"],
                     'type'        => 'string',
                     'displayType' => 'text',
+                    'lang' => ['en'],
 
                     'sortable'    => true,
                     'filterable'  => [
@@ -51,6 +53,7 @@ class Country extends Model
                     'label'       => ["dv" => "ޤައުމިއްޔަތު", "en" => "Nationality"],
                     'type'        => 'string',
                     'displayType' => 'text',
+                    'lang' => ['dv'],
 
                     'sortable'    => true,
                     'filterable'  => [
@@ -66,6 +69,7 @@ class Country extends Model
                     'relationLabel' => ["dv" => "ގައުމު", "en" => "Country"],
                     'type'          => 'string',
                     'displayType'   => 'text',
+                    'lang' => ['en'],
 
                     'sortable'      => true,
                     'filterable'    => [
@@ -80,6 +84,7 @@ class Country extends Model
                     'label'       => ["dv" => "ނަން", "en" => "Name"],
                     'type'        => 'string',
                     'displayType' => 'text',
+                    'lang' => ['dv'],
 
                     'sortable'    => true,
                     'filterable'  => [
@@ -94,6 +99,7 @@ class Country extends Model
                     'label'       => ["dv" => "ކޯޑު", "en" => "Alpha-3 Code"],
                     'type'        => 'string',
                     'displayType' => 'text',
+                    'lang' => ['en'],
 
                     'sortable'    => true,
                     'filterable'  => [
@@ -107,11 +113,13 @@ class Country extends Model
                     'hidden'      => true,
                     'type'        => 'datetime',
                     'displayType' => 'text',
+                    'lang' => ['en', 'dv'],
                 ],
                 'updated_at'          => [
                     'hidden'      => true,
                     'type'        => 'datetime',
                     'displayType' => 'text',
+                    'lang' => ['en', 'dv'],
                 ],
             ],
             'searchable' => [

@@ -148,21 +148,44 @@ class Person extends Model
                     'key' => 'gender',
                     'label' => ['dv' => 'ޖިންސު', 'en' => 'Gender'],
                     'type' => 'string',
-                    'displayType' => 'chip',
                     'lang' => ['en', 'dv'],
+                    'displayType' => 'chip',
+                    'inlineEditable' => true,
+                    // 'displayProps' => [
+                    //     'items' => [
+                    //         ['title' => 'Male', 'value' => 'M'],
+                    //         ['title' => 'Female', 'value' => 'F'],
+                    //     ],
+                    // ],
+                    'displayProps'   => [
+                        'M' => [
+                            'label'       => 'Male',
+                            'color'       => 'primary',
+                            'prependIcon' => 'user',
+                        ],
+                        'F' => [
+                            'label'       => 'Female',
+                            'color'       => 'success',
+                            'prependIcon' => 'users',
+                        ],
+                    ],
 
                     'filterable' => [
                         'type' => 'select',
                         'label' => ['dv' => 'ޖިންސު', 'en' => 'Gender'],
                         'mode' => 'self',
                         'items' => [
-                            ['itemTitle' => '-empty-', 'itemValue' => ''],
-                            ['itemTitle' => 'Male', 'itemValue' => 'male'],
-                            ['itemTitle' => 'Female', 'itemValue' => 'female'],
+                            ['itemTitleDv' => '-ނެތް-','itemTitleEn' => '-empty-', 'itemValue' => ''],
+                            ['itemTitleDv' => 'ފިރިހެން','itemTitleEn' => 'Male', 'itemValue' => 'male'],
+                            ['itemTitleDv' => 'އަންހެނެ','itemTitleEn' => 'Female', 'itemValue' => 'female'],
                         ],
                         // 'value'     => 'Gender',
-                        // 'itemTitle' => 'Gender',
-                        // 'itemValue' => 'gender',
+                        // 'itemTitle' => 'itemTitle',
+                        'itemTitle' => [
+                            'dv' => 'itemTitleDv',
+                            'en' => 'itemTitleEn',
+                        ],
+                        'itemValue' => 'itemValue',
                     ],
                 ],
 
@@ -197,10 +220,13 @@ class Person extends Model
                         'label' => ['dv' => 'ޤައުމު', 'en' => 'Country'],
                         'mode' => 'relation',
                         'relationship' => 'country',
-                        'itemTitle' => 'name_eng',
+                        'itemTitle' => [
+                            'dv' => 'name_div',
+                            'en' => 'name_eng',
+                        ],
+                        'itemValue' => 'id',
                         'sourceModel' => 'Country', // not required now since mode is 'relation' and relationship is provided
                         'value' => 'Country', // not required now since mode is 'relation' and relationship is provided
-                        'itemValue' => 'id',      // not required now since mode is 'relation' and relationship is provided
                     ],
                 ],
 
@@ -254,9 +280,13 @@ class Person extends Model
                     'key' => 'is_in_custody',
                     'label' => ['dv' => 'ހުރީ ހައްޔަރުގަ', 'en' => 'Is in custody'],
                     'type' => 'boolean',
-                    'displayType' => 'checkbox',
                     'lang' => ['en', 'dv'],
                     'sortable' => true,
+                    'displayType' => 'checkbox',
+                    'displayProps' => [
+                        'label' => ' ',
+                        'color' => 'primary',
+                    ],
                 ],
 
                 'created_at' => [

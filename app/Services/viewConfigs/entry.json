@@ -7,22 +7,19 @@
             "table": {
                 "button": ["close", "clear"],
                 "actionButtons": ["edit", "delete", "view"]
-
             },
             "FilterSection": {
-                "button": ["create", "edit"]
+                "button": ["create", "edit"],
+                "filters": ["gender", "country.name_eng"]
             }
         },
 
         "columns": [
-            "country_id",
             "id",
-            "country.name_eng",
-            "first_name_eng",
-            "first_name_div",
-            "gender",
-            "is_in_custody",
-            "date_of_birth"
+            "entry_type_id",
+            "ref_num",
+            "summary",
+            "date_entry"
         ],
 
         "columnCustomizations": {
@@ -40,7 +37,7 @@
                 }
             },
             "gender": {
-                "sortable": false,
+                "sortable": true,
                 "hidden": false,
                 "displayType": "select",
                 "inlineEditable": true,
@@ -53,7 +50,7 @@
             }
         },
 
-        "filters": ["gender", "country_id"],
+        "filters": ["id"],
         "per_page": 10,
         "lang": ["en", "dv"]
     }
