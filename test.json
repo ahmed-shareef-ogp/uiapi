@@ -1,0 +1,203 @@
+{
+    "data": [
+        {
+            "country_id": 1,
+            "id": 1,
+            "first_name_div": "ޢަލީ",
+            "gender": "F",
+            "is_in_custody": 0,
+            "date_of_birth": "1952-02-22"
+        },
+        {
+            "country_id": 1,
+            "id": 2,
+            "first_name_div": "އާދަމް",
+            "gender": "M",
+            "is_in_custody": 0,
+            "date_of_birth": "1986-03-08"
+        },
+        {
+            "country_id": 1,
+            "id": 3,
+            "first_name_div": "ޙަސަން",
+            "gender": "M",
+            "is_in_custody": 0,
+            "date_of_birth": "1965-05-13"
+        },
+        {
+            "country_id": 1,
+            "id": 4,
+            "first_name_div": "މުޙައްމަދު",
+            "gender": "M",
+            "is_in_custody": 0,
+            "date_of_birth": "1951-03-16"
+        },
+        {
+            "country_id": 1,
+            "id": 5,
+            "first_name_div": "ޙުސައިން",
+            "gender": "F",
+            "is_in_custody": 0,
+            "date_of_birth": "1981-03-22"
+        },
+        {
+            "country_id": 1,
+            "id": 6,
+            "first_name_div": "ޝާނު",
+            "gender": "M",
+            "is_in_custody": 0,
+            "date_of_birth": "1900-01-01"
+        },
+        {
+            "country_id": 1,
+            "id": 7,
+            "first_name_div": "އަޙްމަދު",
+            "gender": "M",
+            "is_in_custody": 0,
+            "date_of_birth": "1983-02-22"
+        },
+        {
+            "country_id": 49,
+            "id": 8,
+            "first_name_div": "އަޙުމަދު",
+            "gender": "M",
+            "is_in_custody": 0,
+            "date_of_birth": "1984-02-22"
+        },
+        {
+            "country_id": 1,
+            "id": 9,
+            "first_name_div": "އަޙްމަދު",
+            "gender": "M",
+            "is_in_custody": 0,
+            "date_of_birth": "1986-11-18"
+        },
+        {
+            "country_id": 1,
+            "id": 10,
+            "first_name_div": "ޢަފީފާ",
+            "gender": "F",
+            "is_in_custody": 0,
+            "date_of_birth": "1978-02-22"
+        }
+    ],
+    "component": "listView",
+    "componentSettings": {
+        "table": {
+            "pagination": {
+                "current_page": 1,
+                "last_page": 5087,
+                "per_page": 10,
+                "total": 50868
+            },
+            "headers": [
+                {
+                    "title": "ފުރަތަމަ ނަން",
+                    "value": "first_name_div",
+                    "sortable": true,
+                    "hidden": false,
+                    "type": "string",
+                    "displayType": "text"
+                },
+                {
+                    "title": "ޖިންސު",
+                    "value": "gender",
+                    "sortable": false,
+                    "hidden": false,
+                    "type": "string",
+                    "displayType": "select",
+                    "displayProps": {
+                        "items": [
+                            {
+                                "title": "Male",
+                                "value": "M"
+                            },
+                            {
+                                "title": "Female",
+                                "value": "F"
+                            }
+                        ]
+                    },
+                    "inlineEditable": true,
+                    "lang": "en"
+                },
+                {
+                    "title": "މިވަގުތުބަންދުގައި",
+                    "value": "is_in_custody",
+                    "sortable": true,
+                    "hidden": false,
+                    "type": "boolean",
+                    "displayType": "checkbox",
+                    "displayProps": {
+                        "color": "primary"
+                    },
+                    "lang": "en",
+                    "inlineEditable": true
+                },
+                {
+                    "title": "އުފަން ދުވަސް",
+                    "value": "date_of_birth",
+                    "sortable": true,
+                    "hidden": false,
+                    "type": "date",
+                    "displayType": "text",
+                    "lang": "en"
+                }
+            ]
+        },
+        "FilterSection": {
+            "settings": {
+                "type": "submit"
+            },
+            "buttons": [
+                {
+                    "type": "submit",
+                    "color": "primary",
+                    "prependIcon": "magnifying-glass",
+                    "variant": "contained"
+                },
+                {
+                    "type": "Clear",
+                    "label": "Clear",
+                    "color": "secondary"
+                },
+                {
+                    "type": "Close",
+                    "label": "Close",
+                    "color": "gray"
+                }
+            ],
+            "filters": [
+                {
+                    "type": "Select",
+                    "key": "gender",
+                    "label": "ޖިންސު",
+                    "itemTitle": "itemTitleDv",
+                    "itemValue": "itemValue",
+                    "items": [
+                        {
+                            "itemTitleDv": "-ނެތް-",
+                            "itemValue": ""
+                        },
+                        {
+                            "itemTitleDv": "ފިރިހެން",
+                            "itemValue": "M"
+                        },
+                        {
+                            "itemTitleDv": "އަންހެނެ",
+                            "itemValue": "F"
+                        }
+                    ]
+                },
+                {
+                    "type": "Select",
+                    "key": "country_id",
+                    "label": "ޤައުމު",
+                    "itemTitle": "name_div",
+                    "itemValue": "id",
+                    "url": "https://uiapi.pgo.mv/api/Country/options/id?itemTitle=name_div&itemValue=id&lang=dv"
+                }
+            ]
+        }
+    }
+}

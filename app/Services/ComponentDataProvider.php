@@ -149,8 +149,9 @@ class ComponentDataProvider
     public function isLangAllowedForComponent(array $compBlock, string $lang): bool
     {
         $allowedLangs = $compBlock['lang'] ?? null;
-        if (! is_array($allowedLangs)) {
-            return true;
+        // Require explicit language declaration on the component block.
+        if (! is_array($allowedLangs) || empty($allowedLangs)) {
+            return false;
         }
         $allowedNormalized = array_values(array_unique(array_map(fn ($l) => strtolower((string) $l), $allowedLangs)));
 

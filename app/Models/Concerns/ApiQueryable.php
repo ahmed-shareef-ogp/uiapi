@@ -1,13 +1,12 @@
 <?php
-
 namespace App\Models\Concerns;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Arr;
-use Illuminate\Support\Str;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 /**
  * ApiQueryable
@@ -50,48 +49,49 @@ trait ApiQueryable
     public function toApiRecord(?array $columnsSubset = null, bool $includeMeta = true): array
     {
         // Default to the model's declared schema columns.
-        $schema = $this->apiSchema();
+        $schema          = $this->apiSchema();
         $declaredColumns = array_keys($schema['columns'] ?? []);
 
         // Parse subset tokens into local columns and nested relation field requests.
         // Keep the original alias (e.g. entry_type_id) to flatten keys as "alias.field".
-        $localSubset = [];
+        $localSubset         = [];
         $nestedAliasToFields = [];
         $aliasToRelationName = [];
 
-        if (is_array($columnsSubset) && !empty($columnsSubset)) {
+        if (is_array($columnsSubset) && ! empty($columnsSubset)) {
             foreach ($columnsSubset as $token) {
-                if (!is_string($token)) {
+                if (! is_string($token)) {
                     continue;
                 }
                 if (Str::contains($token, '.')) {
                     [$alias, $col] = array_pad(explode('.', $token, 2), 2, null);
-                    if (!$alias || !$col) {
+
+                    if (! $alias || ! $col) {
                         continue;
                     }
 
                     // Resolve alias to an actual relation method name, to fetch related model
                     $relationName = null;
                     if (method_exists($this, $alias)) {
-                        try { $relTest = $this->{$alias}(); } catch (\Throwable $e) { $relTest = null; }
+                        try { $relTest = $this->{$alias}();} catch (\Throwable $e) {$relTest = null;}
                         if ($relTest instanceof \Illuminate\Database\Eloquent\Relations\Relation) {
                             $relationName = $alias;
                         }
                     }
                     // Support snake_case alias mapping to relation method (e.g., entry_type -> entryType)
-                    if (!$relationName) {
+                    if (! $relationName) {
                         $camel = Str::camel($alias);
                         if (method_exists($this, $camel)) {
-                            try { $relTest = $this->{$camel}(); } catch (\Throwable $e) { $relTest = null; }
+                            try { $relTest = $this->{$camel}();} catch (\Throwable $e) {$relTest = null;}
                             if ($relTest instanceof \Illuminate\Database\Eloquent\Relations\Relation) {
                                 $relationName = $camel;
                             }
                         }
                     }
-                    if (!$relationName && Str::endsWith($alias, '_id')) {
+                    if (! $relationName && Str::endsWith($alias, '_id')) {
                         $guess = Str::camel(substr($alias, 0, -3));
                         if (method_exists($this, $guess)) {
-                            try { $relTest = $this->{$guess}(); } catch (\Throwable $e) { $relTest = null; }
+                            try { $relTest = $this->{$guess}();} catch (\Throwable $e) {$relTest = null;}
                             if ($relTest instanceof \Illuminate\Database\Eloquent\Relations\Relation) {
                                 $relationName = $guess;
                             }
@@ -109,7 +109,7 @@ trait ApiQueryable
             }
         }
 
-        $effectiveColumns = !empty($localSubset)
+        $effectiveColumns = ! empty($localSubset)
             ? array_values(array_intersect($localSubset, $declaredColumns))
             : $declaredColumns;
 
@@ -125,7 +125,7 @@ trait ApiQueryable
             }));
 
             if ($relationValue instanceof Model) {
-                if (!empty($aliasesForRelation)) {
+                if (! empty($aliasesForRelation)) {
                     foreach ($aliasesForRelation as $alias) {
                         $fields = $nestedAliasToFields[$alias] ?? [];
                         foreach ($fields as $field) {
@@ -169,10 +169,10 @@ trait ApiQueryable
      */
     protected function safeSchemaColumns(?Model $model): array
     {
-        if (!$model) {
+        if (! $model) {
             return [];
         }
-        if (!method_exists($model, 'apiSchema')) {
+        if (! method_exists($model, 'apiSchema')) {
             return [];
         }
         $schema = $model->apiSchema();
@@ -189,7 +189,7 @@ trait ApiQueryable
     public static function applyApiFilters(Builder $query, array $filters, array $columnsSchema): void
     {
         foreach ($filters as $field => $value) {
-            if (!array_key_exists($field, $columnsSchema)) {
+            if (! array_key_exists($field, $columnsSchema)) {
                 // Ignore unknown fields defensively; upstream validation should catch this
                 continue;
             }
@@ -218,7 +218,7 @@ trait ApiQueryable
      */
     public static function applyApiSearch(Builder $query, ?string $q, array $searchable): void
     {
-        if (!$q || empty($searchable)) {
+        if (! $q || empty($searchable)) {
             return;
         }
 
@@ -242,14 +242,14 @@ trait ApiQueryable
      */
     public static function applyApiSort(Builder $query, ?string $sort, array $columnsSchema): void
     {
-        if (!$sort) {
+        if (! $sort) {
             return;
         }
 
         $direction = Str::startsWith($sort, '-') ? 'desc' : 'asc';
-        $field = ltrim($sort, '-');
+        $field     = ltrim($sort, '-');
 
-        if (!array_key_exists($field, $columnsSchema)) {
+        if (! array_key_exists($field, $columnsSchema)) {
             // Ignore invalid sort; validation should reject this upstream
             return;
         }
@@ -267,12 +267,12 @@ trait ApiQueryable
     public static function applyApiSorts(Builder $query, array $sorts, array $columnsSchema): void
     {
         foreach ($sorts as $sort) {
-            if (!is_string($sort) || $sort === '') {
+            if (! is_string($sort) || $sort === '') {
                 continue;
             }
             $direction = Str::startsWith($sort, '-') ? 'desc' : 'asc';
-            $field = ltrim($sort, '-');
-            if (!array_key_exists($field, $columnsSchema)) {
+            $field     = ltrim($sort, '-');
+            if (! array_key_exists($field, $columnsSchema)) {
                 // Ignore invalid field; upstream validation should block it
                 continue;
             }
@@ -293,7 +293,7 @@ trait ApiQueryable
      */
     public static function parseWithRelations(Model $model, ?string $with): array
     {
-        if (!$with) {
+        if (! $with) {
             return [];
         }
 
@@ -302,12 +302,12 @@ trait ApiQueryable
 
         foreach ($paths as $path) {
             $segments = explode('.', $path);
-            $first = $segments[0] ?? null;
-            if (!$first) {
+            $first    = $segments[0] ?? null;
+            if (! $first) {
                 continue;
             }
 
-            if (!method_exists($model, $first)) {
+            if (! method_exists($model, $first)) {
                 // Unknown relation method; skip
                 continue;
             }

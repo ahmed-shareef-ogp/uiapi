@@ -12,7 +12,7 @@
             {
                 "type": "submit",
                 "color": "primary",
-                "icon": "magnifying-glass",
+                "prependIcon": "magnifying-glass",
                 "variant": "contained"
             },
             {

@@ -12,7 +12,8 @@
             {
                 "type": "submit",
                 "color": "primary",
-                "icon": "magnifying-glass",
+                "label": "Search",
+                "prependIcon": "magnifying-glass",
                 "variant": "contained"
             },
             {

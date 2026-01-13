@@ -1,11 +1,11 @@
 <?php
 namespace App\Models;
 
+use App\Models\BaseModel;
 use App\Models\Concerns\ApiQueryable;
 use App\Models\Person;
-use Illuminate\Database\Eloquent\Model;
 
-class Country extends Model
+class Country extends BaseModel
 {
     use ApiQueryable;
 
@@ -38,7 +38,7 @@ class Country extends Model
                     'label'       => ["dv" => "ޤައުމިއްޔަތު", "en" => "Nationality"],
                     'type'        => 'string',
                     'displayType' => 'text',
-                    'lang' => ['en'],
+                    'lang'        => ['en'],
 
                     'sortable'    => true,
                     'filterable'  => [
@@ -53,7 +53,7 @@ class Country extends Model
                     'label'       => ["dv" => "ޤައުމިއްޔަތު", "en" => "Nationality"],
                     'type'        => 'string',
                     'displayType' => 'text',
-                    'lang' => ['dv'],
+                    'lang'        => ['dv'],
 
                     'sortable'    => true,
                     'filterable'  => [
@@ -69,7 +69,7 @@ class Country extends Model
                     'relationLabel' => ["dv" => "ގައުމު", "en" => "Country"],
                     'type'          => 'string',
                     'displayType'   => 'text',
-                    'lang' => ['en'],
+                    'lang'          => ['en'],
 
                     'sortable'      => true,
                     'filterable'    => [
@@ -84,7 +84,7 @@ class Country extends Model
                     'label'       => ["dv" => "ނަން", "en" => "Name"],
                     'type'        => 'string',
                     'displayType' => 'text',
-                    'lang' => ['dv'],
+                    'lang'        => ['dv'],
 
                     'sortable'    => true,
                     'filterable'  => [
@@ -99,7 +99,7 @@ class Country extends Model
                     'label'       => ["dv" => "ކޯޑު", "en" => "Alpha-3 Code"],
                     'type'        => 'string',
                     'displayType' => 'text',
-                    'lang' => ['en'],
+                    'lang'        => ['en'],
 
                     'sortable'    => true,
                     'filterable'  => [
@@ -113,13 +113,13 @@ class Country extends Model
                     'hidden'      => true,
                     'type'        => 'datetime',
                     'displayType' => 'text',
-                    'lang' => ['en', 'dv'],
+                    'lang'        => ['en', 'dv'],
                 ],
                 'updated_at'          => [
                     'hidden'      => true,
                     'type'        => 'datetime',
                     'displayType' => 'text',
-                    'lang' => ['en', 'dv'],
+                    'lang'        => ['en', 'dv'],
                 ],
             ],
             'searchable' => [
@@ -130,6 +130,24 @@ class Country extends Model
                 'country_code_alpha3',
             ],
 
+        ];
+    }
+
+    public function rules(): array
+    {
+        return [
+            'country_code_alpha3' => [
+                'required',
+                'numeric',
+            ],
+        ];
+    }
+
+    public static function validationMessages(): array
+    {
+        return [
+            'country_code_alpha3.required' => 'Country code is required.',
+            'country_code_alpha3.numeric'  => 'Country code must contain only numbers.',
         ];
     }
 
