@@ -1,15 +1,16 @@
 <?php
+
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
-use Illuminate\Support\Collection;
 use Illuminate\Pagination\Paginator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Validator;
-
+use Illuminate\Support\Str;
 
 abstract class BaseModel extends Model
 {
@@ -37,16 +38,16 @@ abstract class BaseModel extends Model
      */
     protected array $pivotable = [];
 
-    public static function paginateFromRequest(Builder $query, ?string $pagination): Paginator | Collection
+    public static function paginateFromRequest(Builder $query, ?string $pagination, ?int $perPage = null, ?int $page = null): Paginator|Collection
     {
         if ($pagination === 'off') {
             return $query->get();
         }
 
-        return $query->simplePaginate();
+        return $query->simplePaginate($perPage ?? 15, ['*'], 'page', $page);
     }
 
-    public static function createFromRequest(Request $request, User $user = null)
+    public static function createFromRequest(Request $request, ?User $user = null)
     {
         $data = static::prepareData($request, $user);
 
@@ -58,7 +59,7 @@ abstract class BaseModel extends Model
         return $record;
     }
 
-    protected static function prepareData(Request $request, User $user = null): array
+    protected static function prepareData(Request $request, ?User $user = null): array
     {
         $data = $request->except(['password', 'pivot']);
 
@@ -138,7 +139,7 @@ abstract class BaseModel extends Model
         }
     }
 
-    protected static function handleFiles(Request $request, Model $record, User $user = null): void
+    protected static function handleFiles(Request $request, Model $record, ?User $user = null): void
     {
         if (! method_exists(static::class, 'fileFields')) {
             return;
@@ -162,7 +163,7 @@ abstract class BaseModel extends Model
 
         Validator::make(
             $request->all(),
-            (new static )->rules(),
+            (new static)->rules(),
             static::validationMessages()
         )->validate();
 
@@ -182,7 +183,7 @@ abstract class BaseModel extends Model
 
         $valid = array_filter(
             $requested,
-            fn($col) => Schema::hasColumn($this->getTable(), $col)
+            fn ($col) => Schema::hasColumn($this->getTable(), $col)
         );
 
         if (! empty($valid)) {
@@ -256,10 +257,103 @@ abstract class BaseModel extends Model
 
         foreach (explode(',', $sort) as $field) {
             $direction = str_starts_with($field, '-') ? 'desc' : 'asc';
-            $column    = ltrim($field, '-');
+            $column = ltrim($field, '-');
 
             if ($this->isSortable($column)) {
                 $query->orderBy($column, $direction);
+            }
+        }
+
+        return $query;
+    }
+
+    /**
+     * Apply filters from a comma-separated string: field:value pairs.
+     * Supports:
+     * - AND across pairs: a:b,c:d
+     * - OR within a field using pipe: a:x|y
+     * - Relation fields: relation.field:value (applied via whereHas)
+     * - Special values: null, !null, true, false, empty string
+     */
+    public function scopeFilter(Builder $query, ?string $filter): Builder
+    {
+        if (! $filter || trim($filter) === '') {
+            return $query;
+        }
+
+        $pairs = array_filter(array_map('trim', explode(',', $filter)), fn ($p) => $p !== '');
+        foreach ($pairs as $pair) {
+            [$field, $raw] = array_pad(explode(':', $pair, 2), 2, null);
+            $field = is_string($field) ? trim($field) : '';
+            if ($field === '' || $raw === null) {
+                continue;
+            }
+
+            $tokens = array_map('trim', explode('|', (string) $raw));
+            $values = [];
+            $hasEmpty = false;
+            $hasNull = false;
+            $hasNotNull = false;
+
+            foreach ($tokens as $tok) {
+                $lower = strtolower($tok);
+                if ($tok === '') {
+                    $hasEmpty = true;
+                } elseif ($lower === 'null') {
+                    $hasNull = true;
+                } elseif ($lower === '!null') {
+                    $hasNotNull = true;
+                } elseif ($lower === 'true') {
+                    $values[] = true;
+                } elseif ($lower === 'false') {
+                    $values[] = false;
+                } else {
+                    $values[] = $tok;
+                }
+            }
+
+            $apply = function (Builder $b, string $col) use ($values, $hasEmpty, $hasNull, $hasNotNull): void {
+                $b->where(function (Builder $q) use ($col, $values, $hasEmpty, $hasNull, $hasNotNull): void {
+                    $first = true;
+                    if (! empty($values)) {
+                        $q->whereIn($col, $values);
+                        $first = false;
+                    }
+                    if ($hasEmpty) {
+                        if ($first) {
+                            $q->where($col, '');
+                        } else {
+                            $q->orWhere($col, '');
+                        }
+                        $first = false;
+                    }
+                    if ($hasNull) {
+                        if ($first) {
+                            $q->whereNull($col);
+                        } else {
+                            $q->orWhereNull($col);
+                        }
+                        $first = false;
+                    }
+                    if ($hasNotNull) {
+                        if ($first) {
+                            $q->whereNotNull($col);
+                        } else {
+                            $q->orWhereNotNull($col);
+                        }
+                    }
+                });
+            };
+
+            if (Str::contains($field, '.')) {
+                [$relation, $relCol] = array_pad(explode('.', $field, 2), 2, null);
+                if ($relation && $relCol && method_exists($this, $relation)) {
+                    $query->whereHas($relation, function (Builder $relQ) use ($apply, $relCol): void {
+                        $apply($relQ, $relCol);
+                    });
+                }
+            } else {
+                $apply($query, $field);
             }
         }
 
@@ -284,14 +378,14 @@ abstract class BaseModel extends Model
 
                 // Always include the related model key
                 $related = $this->$name()->getRelated();
-                $key     = $related->getKeyName();
+                $key = $related->getKeyName();
 
                 if (! in_array($key, $cols, true)) {
                     array_unshift($cols, $key);
                 }
 
                 $query->with([
-                    $name => fn($q) => $q->select($cols),
+                    $name => fn ($q) => $q->select($cols),
                 ]);
             } else {
                 $query->with($name);
@@ -326,7 +420,7 @@ abstract class BaseModel extends Model
             }
 
             $query->with([
-                $relation => fn($q) => $q->withPivot('*'),
+                $relation => fn ($q) => $q->withPivot('*'),
             ]);
         }
 
@@ -340,24 +434,28 @@ abstract class BaseModel extends Model
     public function isSearchable(string $column): bool
     {
         return true; // functionality disabled - all columns are searchable
+
         return in_array($column, $this->searchable, true);
     }
 
     public function isSortable(string $column): bool
     {
         return true; // functionality disabled - all columns are sortable
+
         return in_array($column, $this->sortable, true);
     }
 
     protected function isWithableRelation(string $relation): bool
     {
         return true; // functionality disabled - all relations are withable
+
         return empty($this->withable) || in_array($relation, $this->withable, true);
     }
 
     protected function isPivotableRelation(string $relation): bool
     {
         return true; // functionality disabled - all relations are pivotable
+
         return empty($this->pivotable) || in_array($relation, $this->pivotable, true);
     }
 }

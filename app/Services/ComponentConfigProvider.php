@@ -7,13 +7,13 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 
 /**
- * ComponentDataProvider
+ * ComponentConfigProvider
  *
  * Provides non-HTTP, component-centric helpers used by the generic API
  * to shape view configs, headers, filters, and language-aware column
  * handling. Keeps GenericApiService focused on request/response logic.
  */
-class ComponentDataProvider
+class ComponentConfigProvider
 {
     /**
      * Whether hidden columns should be included when generating headers.
@@ -431,9 +431,19 @@ class ComponentDataProvider
                         $filter['items'] = [];
                     }
                 } else {
-                    $sourceModel = (string) ($f['sourceModel'] ?? $modelName);
-                    $paramField = ($sourceModel === $modelName) ? $field : $itemValue;
-                    $filter['url'] = url("/api/{$sourceModel}/options/{$paramField}")."?itemTitle={$itemTitle}&itemValue={$itemValue}&lang={$lang}";
+                    // Relation-backed select: build URL to generic index endpoint
+                    $relationship = (string) ($f['relationship'] ?? '');
+                    $relatedModelName = $relationship !== '' ? Str::studly($relationship) : null;
+                    if (! $relatedModelName) {
+                        $base = $key;
+                        if (Str::endsWith($base, '_id')) {
+                            $base = Str::beforeLast($base, '_id');
+                        }
+                        $relatedModelName = Str::studly($base);
+                    }
+                    $columnsParam = $itemValue.','.$itemTitle;
+                    $sortParam = $itemTitle;
+                    $filter['url'] = url("/api/{$relatedModelName}").'?columns='.$columnsParam.'&sort='.$sortParam.'&pagination=off&wrap=data';
                 }
             }
             $filters[] = $filter;
@@ -503,12 +513,26 @@ class ComponentDataProvider
                 if ($val === 'on') {
                     $out['pagination'] = [
                         'current_page' => $paginator->currentPage(),
-                        'last_page' => $paginator->lastPage(),
                         'per_page' => $paginator->perPage(),
-                        'total' => $paginator->total(),
                     ];
                 } else {
                     $out['pagination'] = $val;
+                }
+
+                continue;
+            }
+            if ($key === 'datalink') {
+                if ($val === 'on') {
+                    $out['datalink'] = $this->buildDataLink(
+                        $modelInstance,
+                        $columnsSchema,
+                        $columnsSubsetNormalized,
+                        $lang,
+                        $modelName,
+                        (int) $paginator->perPage()
+                    );
+                } else {
+                    $out['datalink'] = $val;
                 }
 
                 continue;
@@ -706,10 +730,13 @@ class ComponentDataProvider
                     } else {
                         $itemTitle = (string) $rawItemTitle;
                     }
-                    $paramField = $itemValue;
                     $out['itemTitle'] = $itemTitle;
                     $out['itemValue'] = $itemValue;
-                    $out['url'] = url("/api/{$relatedBase}/options/{$paramField}")."?itemTitle={$itemTitle}&itemValue={$itemValue}&lang={$lang}";
+                    // Build URL against GenericApiController index: absolute URL, columns + sort + pagination=off + wrap=data
+                    // Example: https://uiapi.pgo.mv/api/Country?columns=id,name_eng&sort=name_eng&pagination=off&wrap=data
+                    $base = url("/api/{$relatedBase}");
+                    $query = "columns={$itemValue},{$itemTitle}&sort={$itemTitle}&pagination=off&wrap=data";
+                    $out['url'] = $base.'?'.$query;
                 }
             }
 
@@ -852,7 +879,6 @@ class ComponentDataProvider
                 $represented[$token] = true;
             }
         }
-
 
         return $out;
     }
@@ -1162,5 +1188,62 @@ class ComponentDataProvider
         }
 
         return [$columnsSubsetNormalized, array_unique($relationsFromColumns)];
+    }
+
+    /**
+     * Build an absolute datalink URL to the generic data API based on component config.
+     * Includes columns, with (relation:field), and per_page only.
+     */
+    protected function buildDataLink(
+        Model $modelInstance,
+        array $columnsSchema,
+        ?array $columnsSubsetNormalized,
+        string $lang,
+        string $modelName,
+        int $perPage
+    ): string {
+        // Determine column tokens respecting language support.
+        $baseTokens = [];
+        if (is_array($columnsSubsetNormalized) && ! empty($columnsSubsetNormalized)) {
+            $baseTokens = array_values(array_unique(array_filter(array_map(fn ($t) => is_string($t) ? $t : null, $columnsSubsetNormalized))));
+        } else {
+            $baseTokens = array_keys($columnsSchema);
+        }
+        $tokens = $this->filterTokensByLangSupport($modelInstance, $columnsSchema, $baseTokens, $lang);
+
+        // Build with= relation map (relation => [fields]) from relation tokens.
+        $relationFields = [];
+        foreach ($tokens as $token) {
+            if (! Str::contains($token, '.')) {
+                continue;
+            }
+            [$rel, $field] = array_pad(explode('.', $token, 2), 2, null);
+            if (! $field) {
+                continue;
+            }
+            if (! isset($relationFields[$rel])) {
+                $relationFields[$rel] = [];
+            }
+            if (! in_array($field, $relationFields[$rel], true)) {
+                $relationFields[$rel][] = $field;
+            }
+        }
+
+        $withSegments = [];
+        foreach ($relationFields as $rel => $fields) {
+            $withSegments[] = $rel.':'.implode(',', $fields);
+        }
+
+        // Compose absolute URL using Laravel's url() helper.
+        $base = url("/api/{$modelName}");
+
+        // Build query string manually to preserve commas.
+        $query = 'columns='.implode(',', $tokens);
+        if (! empty($withSegments)) {
+            $query .= '&with='.implode(',', $withSegments);
+        }
+        $query .= '&per_page='.$perPage;
+
+        return $base.'?'.$query;
     }
 }

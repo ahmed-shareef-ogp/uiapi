@@ -1,10 +1,9 @@
 <?php
 
-use Illuminate\Http\Request;
-use App\Services\GenericApiService;
-use Illuminate\Support\Facades\Route;
-use Illuminate\Database\Eloquent\Model;
 use App\Http\Controllers\GenericApiController;
+use App\Services\ComponentConfigService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 
 /**
  * Generic CRUD routes using model name in path.
@@ -46,11 +45,11 @@ use App\Http\Controllers\GenericApiController;
 //     return app(GenericApiService::class)->options($request, $model, $field);
 // });
 
-Route::get('cdp/{model}', function (Request $request, string $model) {
-    return app(GenericApiService::class)->index($request, $model);
+Route::get('ccs/{model}', function (Request $request, string $model) {
+    return app(ComponentConfigService::class)->index($request, $model);
 });
 
-Route::get('/{model}', [GenericApiController::class, 'index']);         // will need to reflect the payload format as per
+Route::get('/{model}', [GenericApiController::class, 'index']);
 Route::get('/{model}/{id}', [GenericApiController::class, 'show']);
 Route::post('/{model}', [GenericApiController::class, 'store']);
 Route::put('/{model}/{id}', [GenericApiController::class, 'update']);

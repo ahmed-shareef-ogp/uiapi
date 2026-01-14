@@ -1,4 +1,4 @@
-# Generic API Guide (Frontend)
+# Generic API Guide (Frontend) V1.01
 
 Base URL: https://uiapi.pgo.mv/api
 
@@ -8,13 +8,10 @@ This API provides generic CRUD endpoints for any Eloquent model by using the mod
 - List: `GET /api/{model}`
 - Show: `GET /api/{model}/{id}`
 - Create: `POST /api/{model}`
-- Update: `PUT /api/{model}/{id}`
 - Delete: `DELETE /api/{model}/{id}`
-
 ### Model Names
 Use the model class basename in lowercase. Examples from this app:
 - `person` → `App\Models\Person`
-- `entry` → `App\Models\Entry`
 - `country` → `App\Models\Country`
 - `entrytype` → `App\Models\EntryType`
 - `user` → `App\Models\User`
@@ -29,7 +26,18 @@ Attach these to `GET /api/{model}`:
 - `search`: advanced AND/OR search with `column:value` pairs.
   - AND within a group: comma-separated
   - OR across groups: pipe (`|`) separated
-  - Example: `search=name:ana,email:gmail|username:an` (matches records where `(name LIKE "%ana%" AND email LIKE "%gmail%") OR (username LIKE "%an%")`)
+- `filter`: exact-match filters with AND across pairs and OR within a field.
+  - OR within a field: use `|` (pipe), e.g., `gender:M|F` → gender IN [M,F].
+  - Special values:
+    - `!null`: matches NOT NULL, e.g., `closed_at:!null`.
+    - empty string: use an empty value to match empty string OR NULL, e.g., `status:`.
+  - No wildcards: all comparisons are exact (no LIKE).
+    - `filter=gender:M|F,country.code:MV`
+ - `wrap`: when set to `data`, and `pagination=off`, wraps the array response in a top-level `data` key.
+   - Useful for option lists and components expecting `{ data: [...] }`.
+   - Example: `wrap=data`
+    - `filter=closed_at:null`
+    - `filter=status:` (matches empty string or NULL)
 - `searchAll`: single term searched in model-defined `searchable` columns (if the model defines them).
   - Example: `searchAll=john`
 - `withoutRow`: exclude rows matching exact values using the same AND/OR grammar as `search`.
@@ -37,18 +45,24 @@ Attach these to `GET /api/{model}`:
 - `sort`: comma list; prefix `-` for descending.
   - Example: `sort=-created_at,name`
 - `with`: eager load relations; optionally restrict related columns.
-  - Syntax: `with=relation` or `with=relation:col1,col2`
   - Example: `with=entries:id,title` (primary key is auto-included for related models)
 - `pivot`: eager load belongsToMany relations including pivot data (if the relation exists and is many-to-many).
   - Example: `pivot=tags,categories`
+- Without pagination + wrapped (`pagination=off&wrap=data`):
+  ```json
+  { "data": [ { /* record */ }, ... ] }
+  ```
 - `pagination`: set to `off` to return all rows; otherwise results are paginated (default per-page).
   - You can pass standard `page=2` for subsequent pages.
-
 ### Listing Examples
-- All people, no pagination:
   - `GET /api/person?pagination=off`
-- People with filters, sorts, and relations:
   - `GET /api/person?columns=id,name,email&search=name:Ali|email:gmail&sort=-created_at&with=entries:id,title`
+- People using the new filters (AND pairs, OR within a field):
+  - `GET /api/person?filter=gender:M|F,country.code:MV&sort=name`
+- Option list style (wrapped, no pagination):
+  - `GET /api/country?columns=id,name_div&sort=name_div&pagination=off&wrap=data`
+  - `GET /api/entry?filter=closed_at:!null`
+  - `GET /api/user?filter=active:true,status:`
 
 ### Response Shapes
 - Paginated: Laravel paginator JSON
