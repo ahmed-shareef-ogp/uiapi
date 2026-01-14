@@ -1,14 +1,15 @@
 <?php
 namespace App\Models;
 
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Validator;
+
 
 abstract class BaseModel extends Model
 {
@@ -36,13 +37,13 @@ abstract class BaseModel extends Model
      */
     protected array $pivotable = [];
 
-    public static function paginateFromRequest(Builder $query, ?string $pagination): LengthAwarePaginator | Collection
+    public static function paginateFromRequest(Builder $query, ?string $pagination): Paginator | Collection
     {
         if ($pagination === 'off') {
             return $query->get();
         }
 
-        return $query->paginate();
+        return $query->simplePaginate();
     }
 
     public static function createFromRequest(Request $request, User $user = null)

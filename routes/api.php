@@ -46,6 +46,9 @@ use App\Http\Controllers\GenericApiController;
 //     return app(GenericApiService::class)->options($request, $model, $field);
 // });
 
+Route::get('cdp/{model}', function (Request $request, string $model) {
+    return app(GenericApiService::class)->index($request, $model);
+});
 
 Route::get('/{model}', [GenericApiController::class, 'index']);         // will need to reflect the payload format as per
 Route::get('/{model}/{id}', [GenericApiController::class, 'show']);
