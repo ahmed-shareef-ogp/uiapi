@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
@@ -6,14 +7,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Entry extends Model
 {
-
     private $deletable = [
-        'enabled'   => true,
+        'enabled' => true,
         'condition' => [
             [
-                'field'    => 'date_entry',
+                'field' => 'date_entry',
                 'operator' => '<',
-                'value'    => 'now() - interval \'1 day\''
+                'value' => 'now() - interval \'1 day\'',
             ],
         ],
     ];
@@ -29,51 +29,51 @@ class Entry extends Model
     public function apiSchema(): array
     {
         return [
-            'columns'    => [
-                'id'            => [
-                    'hidden'         => true,
-                    'key'            => 'id',
-                    'label'          => ["dv" => "އައިޑީ", "en" => "Id"],
-                    'type'           => 'number',
+            'columns' => [
+                'id' => [
+                    'hidden' => true,
+                    'key' => 'id',
+                    'label' => ['dv' => 'އައިޑީ', 'en' => 'Id'],
+                    'type' => 'number',
 
-                    'formField'      => true,
+                    'formField' => true,
                     'fieldComponent' => 'textInput',
                     'validationRule' => 'required|integer|unque:entries,id',
 
-                    'sortable'       => true,
-                    'filterable'     => [
-                        'type'  => 'search',
-                        'label' => ["dv" => "އައިޑީ", "en" => "Id"],
+                    'sortable' => true,
+                    'filterable' => [
+                        'type' => 'search',
+                        'label' => ['dv' => 'އައިޑީ', 'en' => 'Id'],
                         'value' => 'Id',
                     ],
                 ],
                 'entry_type_id' => [
                     'hidden' => false,
-                    'label'  => ["dv" => "އެންޓްރީ ޓައިޕް އައިޑީ", "en" => "Entry Type Id"],
-                    'type'   => 'number',
+                    'label' => ['dv' => 'އެންޓްރީ ޓައިޕް އައިޑީ', 'en' => 'Entry Type Id'],
+                    'type' => 'number',
                 ],
-                'ref_num'       => [
+                'ref_num' => [
                     'hidden' => false,
-                    'label'  => ["dv" => "ރެފަރެންސް ނަމްބަރ", "en" => "Reference Number"],
-                    'type'   => 'string',
+                    'label' => ['dv' => 'ރެފަރެންސް ނަމްބަރ', 'en' => 'Reference Number'],
+                    'type' => 'string',
                 ],
-                'summary'       => [
+                'summary' => [
                     'hidden' => false,
-                    'label'  => ["dv" => "ސަމަރީ", "en" => "Summary"],
-                    'type'   => 'string',
+                    'label' => ['dv' => 'ސަމަރީ', 'en' => 'Summary'],
+                    'type' => 'string',
                 ],
-                'date_entry'    => [
+                'date_entry' => [
                     'hidden' => false,
-                    'label'  => ["dv" => "އެންޓްރީކުރި ދުވަސް", "en" => "Date of Entry"],
-                    'type'   => 'date',
+                    'label' => ['dv' => 'އެންޓްރީކުރި ދުވަސް', 'en' => 'Date of Entry'],
+                    'type' => 'date',
                 ],
-                'created_at'    => [
+                'created_at' => [
                     'hidden' => true,
-                    'type'   => 'datetime',
+                    'type' => 'datetime',
                 ],
-                'updated_at'    => [
+                'updated_at' => [
                     'hidden' => true,
-                    'type'   => 'datetime',
+                    'type' => 'datetime',
                 ],
             ],
             'searchable' => [
@@ -81,7 +81,7 @@ class Entry extends Model
                 'summary',
             ],
 
-            'deletable'  => [
+            'deletable' => [
                 'condition' => "'date_entry' < now() - interval '1 day'",
             ],
 
@@ -95,5 +95,4 @@ class Entry extends Model
     {
         return $this->belongsTo(EntryType::class, 'entry_type_id');
     }
-
 }

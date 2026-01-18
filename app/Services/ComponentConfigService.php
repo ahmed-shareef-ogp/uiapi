@@ -444,13 +444,18 @@ class ComponentConfigService
 
     /**
      * Load a component configuration JSON by key (e.g., 'table').
+     * Prefer package ComponentConfigs; fall back to app overrides.
      */
     public function loadComponentConfig(string $componentSettingsKey): array
     {
-        $path = base_path('app/Services/ComponentConfigs/'.$componentSettingsKey.'.json');
-        if (! File::exists($path)) {
+        $packagePath = base_path('packages/uiapi/resources/ComponentConfigs/'.$componentSettingsKey.'.json');
+        $appPath = base_path('app/Services/ComponentConfigs/'.$componentSettingsKey.'.json');
+
+        $path = File::exists($packagePath) ? $packagePath : (File::exists($appPath) ? $appPath : null);
+        if (! $path) {
             return [];
         }
+
         $json = File::get($path);
         $cfg = json_decode($json, true) ?: [];
 

@@ -7,7 +7,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class EntryType extends Model
 {
-
     /**
      * Explicit table name (default would match, added for clarity).
      */

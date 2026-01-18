@@ -4,7 +4,6 @@ namespace App\Models;
 
 class Person extends BaseModel
 {
-
     protected $table = 'people';
 
     protected array $searchable = [
