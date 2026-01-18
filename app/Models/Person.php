@@ -2,11 +2,8 @@
 
 namespace App\Models;
 
-use App\Models\Concerns\ApiQueryable;
-
 class Person extends BaseModel
 {
-    use ApiQueryable;
 
     protected $table = 'people';
 

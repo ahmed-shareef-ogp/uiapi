@@ -2,12 +2,10 @@
 namespace App\Models;
 
 use App\Models\BaseModel;
-use App\Models\Concerns\ApiQueryable;
 use App\Models\Person;
 
 class Country extends BaseModel
 {
-    use ApiQueryable;
 
     public function apiSchema(): array
     {

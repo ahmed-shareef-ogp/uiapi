@@ -1,0 +1,22 @@
+{
+  "name": "ogp/uiapi",
+  "description": "Reusable UI API package",
+  "type": "library",
+  "license": "MIT",
+  "require": {
+    "php": "^8.4",
+    "laravel/framework": "^12.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "Ogp\\UiApi\\": "src/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Ogp\\UiApi\\UiApiServiceProvider"
+      ]
+    }
+  }
+}

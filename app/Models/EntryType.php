@@ -3,12 +3,10 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use App\Models\Concerns\ApiQueryable;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class EntryType extends Model
 {
-    use ApiQueryable;
 
     /**
      * Explicit table name (default would match, added for clarity).

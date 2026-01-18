@@ -1,13 +1,11 @@
 <?php
 namespace App\Models;
 
-use App\Models\Concerns\ApiQueryable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Entry extends Model
 {
-    use ApiQueryable;
 
     private $deletable = [
         'enabled'   => true,
