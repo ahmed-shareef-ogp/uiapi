@@ -1,7 +1,0 @@
-{
-    "table": {
-        "pagination": "on",
-        "headers": "on",
-        "datalink": "on"
-    }
-}
