@@ -1,0 +1,14 @@
+{
+  "settings": {
+    "headers": "on",
+    "filters": "on",
+    "pagination": "on",
+    "datalink": "on",
+    "columns": [
+      { "name": "id", "label": "ID" },
+      { "name": "first_name", "label": "First Name" },
+      { "name": "last_name", "label": "Last Name" },
+      { "name": "email", "label": "Email" }
+    ]
+  }
+}
