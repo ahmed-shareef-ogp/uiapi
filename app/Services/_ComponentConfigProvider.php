@@ -35,19 +35,9 @@ class ComponentConfigProvider
      */
     protected bool $includeTopLevelPagination = false;
 
-    /**
-     * Whether relation tokens in records should be nested.
-     */
-    protected bool $nestRelationsInRecords = true;
-
     public function setIncludeHiddenColumnsInHeaders(bool $value): void
     {
         $this->includeHiddenColumnsInHeaders = $value;
-    }
-
-    public function setIncludeTopLevelHeaders(bool $value): void
-    {
-        $this->includeTopLevelHeaders = $value;
     }
 
     public function getIncludeTopLevelHeaders(): bool
@@ -55,45 +45,14 @@ class ComponentConfigProvider
         return $this->includeTopLevelHeaders;
     }
 
-    public function setIncludeTopLevelFilters(bool $value): void
-    {
-        $this->includeTopLevelFilters = $value;
-    }
-
     public function getIncludeTopLevelFilters(): bool
     {
         return $this->includeTopLevelFilters;
     }
 
-    public function setIncludeTopLevelPagination(bool $value): void
-    {
-        $this->includeTopLevelPagination = $value;
-    }
-
     public function getIncludeTopLevelPagination(): bool
     {
         return $this->includeTopLevelPagination;
-    }
-
-    public function setNestRelationsInRecords(bool $value): void
-    {
-        $this->nestRelationsInRecords = $value;
-    }
-
-    /**
-     * Ensure the model exposes apiSchema() and return it as an array.
-     *
-     * @throws \InvalidArgumentException when apiSchema() is missing
-     */
-    public function getApiSchemaOrFail(Model $model): array
-    {
-        if (! method_exists($model, 'apiSchema')) {
-            throw new \InvalidArgumentException('Model missing apiSchema()');
-        }
-
-        $schema = $model->apiSchema();
-
-        return is_array($schema) ? $schema : [];
     }
 
     /**
@@ -177,89 +136,6 @@ class ComponentConfigProvider
     }
 
     /**
-     * Parse filter query string into validated filters.
-     */
-    public function parseFilters(?string $filter, array $columnsSchema): array
-    {
-        $filters = [];
-        if ($filter) {
-            $pairs = array_filter(array_map('trim', explode(',', $filter)));
-            foreach ($pairs as $pair) {
-                [$field, $value] = array_pad(explode(':', $pair, 2), 2, null);
-                if (! $field || $value === null) {
-                    throw new \InvalidArgumentException("Invalid filter segment '$pair'");
-                }
-                if (! array_key_exists($field, $columnsSchema)) {
-                    throw new \InvalidArgumentException("Filter field '$field' is not defined in apiSchema");
-                }
-                if (Str::contains($value, '*')) {
-                    $filters[$field] = ['like' => str_replace('*', '%', $value)];
-                } else {
-                    $filters[$field] = $value;
-                }
-            }
-        }
-
-        return $filters;
-    }
-
-    /**
-     * Parse sort query string into validated sort tokens.
-     */
-    public function parseSorts(?string $sort, array $columnsSchema, ?array $columnsSubsetNormalized = null): array
-    {
-        $sortTokens = [];
-        if ($sort) {
-            $sortTokens = array_filter(array_map('trim', explode(',', $sort)));
-            foreach ($sortTokens as $tok) {
-                $field = ltrim($tok, '-');
-                if (Str::contains($field, '.')) {
-                    if (! is_array($columnsSubsetNormalized) || ! in_array($field, $columnsSubsetNormalized, true)) {
-                        throw new \InvalidArgumentException("Sort field '$field' is not defined in apiSchema");
-                    }
-                } else {
-                    if (! array_key_exists($field, $columnsSchema)) {
-                        throw new \InvalidArgumentException("Sort field '$field' is not defined in apiSchema");
-                    }
-                }
-            }
-        }
-
-        return $sortTokens;
-    }
-
-    /**
-     * Compute component-driven inputs for index queries in one place.
-     */
-    public function computeComponentQueryInputs(
-        Model $modelInstance,
-        string $modelName,
-        array $columnsSchema,
-        ?string $componentKey,
-        ?string $columnsParam,
-        ?string $filterParam,
-        ?string $sortParam
-    ): array {
-        $resolvedComp = $this->resolveViewComponent($modelName, $componentKey, $columnsParam);
-        $compBlock = $resolvedComp['compBlock'];
-        $columnsParam = $resolvedComp['columnsParam'];
-
-        [$columnsSubsetNormalized, $relationsFromColumns] = $this->normalizeColumnsSubset($modelInstance, $columnsParam, $columnsSchema);
-        $filters = $this->parseFilters($filterParam, $columnsSchema);
-        $sortTokens = $this->parseSorts($sortParam, $columnsSchema, $columnsSubsetNormalized);
-
-        return [
-            'componentKey' => $resolvedComp['componentKey'],
-            'compBlock' => $compBlock,
-            'columnsParam' => $columnsParam,
-            'columnsSubsetNormalized' => $columnsSubsetNormalized,
-            'relationsFromColumns' => $relationsFromColumns,
-            'filters' => $filters,
-            'sortTokens' => $sortTokens,
-        ];
-    }
-
-    /**
      * Load a component configuration JSON by key (e.g., 'table').
      */
     public function loadComponentConfig(string $componentSettingsKey): array
@@ -330,41 +206,6 @@ class ComponentConfigProvider
         }
 
         return $normalized[0];
-    }
-
-    /**
-     * Build headers from a columns schema for a given language.
-     */
-    public function buildHeaders(array $columnsSchema, string $lang): array
-    {
-        $headers = [];
-        foreach ($columnsSchema as $field => $def) {
-            $header = [
-                'title' => $this->labelFor($def, $field, $lang),
-                'value' => $this->keyFor($def, $field),
-                'sortable' => (bool) ($def['sortable'] ?? false),
-                'hidden' => (bool) ($def['hidden'] ?? false),
-            ];
-            if (array_key_exists('type', $def)) {
-                $header['type'] = (string) $def['type'];
-            }
-            if (array_key_exists('displayType', $def)) {
-                $header['displayType'] = (string) $def['displayType'];
-            }
-            if (array_key_exists('displayProps', $def) && is_array($def['displayProps'])) {
-                $header['displayProps'] = $def['displayProps'];
-            }
-            if (array_key_exists('inlineEditable', $def)) {
-                $header['inlineEditable'] = (bool) $def['inlineEditable'];
-            }
-            $override = $this->pickHeaderLangOverride($def, $lang);
-            if ($override !== null) {
-                $header['lang'] = $override;
-            }
-            $headers[] = $header;
-        }
-
-        return $headers;
     }
 
     /**
@@ -483,7 +324,7 @@ class ComponentConfigProvider
         array $columnsSchema,
         ?array $columnsSubsetNormalized,
         string $lang,
-        $paginator,
+        int $perPage,
         string $modelName,
         Model $modelInstance,
         ?array $columnCustomizations = null,
@@ -512,8 +353,8 @@ class ComponentConfigProvider
             if ($key === 'pagination') {
                 if ($val === 'on') {
                     $out['pagination'] = [
-                        'current_page' => $paginator->currentPage(),
-                        'per_page' => $paginator->perPage(),
+                        'current_page' => 1,
+                        'per_page' => $perPage,
                     ];
                 } else {
                     $out['pagination'] = $val;
@@ -529,7 +370,7 @@ class ComponentConfigProvider
                         $columnsSubsetNormalized,
                         $lang,
                         $modelName,
-                        (int) $paginator->perPage()
+                        $perPage
                     );
                 } else {
                     $out['datalink'] = $val;
@@ -538,7 +379,7 @@ class ComponentConfigProvider
                 continue;
             }
             if (is_array($val)) {
-                $out[$key] = $this->buildSectionPayload($val, $columnsSchema, $columnsSubsetNormalized, $lang, $paginator, $modelName, $modelInstance, $columnCustomizations, $allowedFilters);
+                $out[$key] = $this->buildSectionPayload($val, $columnsSchema, $columnsSubsetNormalized, $lang, $perPage, $modelName, $modelInstance, $columnCustomizations, $allowedFilters);
             } else {
                 $out[$key] = $val;
             }
@@ -555,7 +396,7 @@ class ComponentConfigProvider
         array $columnsSchema,
         ?array $columnsSubsetNormalized,
         string $lang,
-        $paginator,
+        int $perPage,
         string $modelName,
         Model $modelInstance,
         ?array $columnCustomizations = null,
@@ -575,7 +416,7 @@ class ComponentConfigProvider
                 $columnsSchema,
                 $columnsSubsetNormalized,
                 $lang,
-                $paginator,
+                $perPage,
                 $modelName,
                 $modelInstance,
                 $columnCustomizations,
@@ -593,7 +434,7 @@ class ComponentConfigProvider
                     $columnsSchema,
                     $columnsSubsetNormalized,
                     $lang,
-                    $paginator,
+                    $perPage,
                     $modelName,
                     $modelInstance,
                     $columnCustomizations,
@@ -823,60 +664,6 @@ class ComponentConfigProvider
             $def = $columnsSchema[$token] ?? null;
             if ($def && $this->columnSupportsLang($def, $lang)) {
                 $out[] = $token;
-            }
-        }
-
-        return $out;
-    }
-
-    /**
-     * Reorder a record to match the ordered tokens requested.
-     */
-    public function reorderRecord(array $record, array $orderedTokens): array
-    {
-        if (empty($orderedTokens)) {
-            return $record;
-        }
-        $out = [];
-        foreach ($orderedTokens as $token) {
-            if (array_key_exists($token, $record)) {
-                $out[$token] = $record[$token];
-            }
-        }
-
-        return $out;
-    }
-
-    /**
-     * Format record based on ordered tokens, optionally nesting relation tokens.
-     */
-    public function formatRecord(array $record, array $orderedTokens): array
-    {
-        if (! $this->nestRelationsInRecords) {
-            return $this->reorderRecord($record, $orderedTokens);
-        }
-
-        $out = [];
-        $represented = [];
-
-        // First pass: respect orderedTokens for top-level ordering
-        foreach ($orderedTokens as $token) {
-            if (! array_key_exists($token, $record)) {
-                continue;
-            }
-            if (Str::contains($token, '.')) {
-                [$group, $field] = array_pad(explode('.', $token, 2), 2, null);
-                if (! $field) {
-                    continue;
-                }
-                if (! isset($out[$group]) || ! is_array($out[$group])) {
-                    $out[$group] = [];
-                }
-                $out[$group][$field] = $record[$token];
-                $represented[$group.'.'.$field] = true;
-            } else {
-                $out[$token] = $record[$token];
-                $represented[$token] = true;
             }
         }
 

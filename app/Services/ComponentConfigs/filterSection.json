@@ -1,18 +1,9 @@
 {
-    "table": {
-        "pagination": "on",
-        "headers": "on"
-    },
-
-    "FilterSection": {
-        "settings": {
-            "type": "submit"
-        },
+    "filterSection": {
         "buttons": [
             {
                 "type": "submit",
                 "color": "primary",
-                "label": "Search",
                 "prependIcon": "magnifying-glass",
                 "variant": "contained"
             },

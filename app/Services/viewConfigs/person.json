@@ -1,17 +1,13 @@
 {
     "listView": {
         "components": {
-            "searchBar": {
-                "button": ["create", "edit"]
-            },
             "table": {
-                "button": ["close", "clear"],
-                "actionButtons": ["edit", "delete", "view"]
-
             },
-            "FilterSection": {
-                "button": ["create", "edit"]
+
+            "filterSection": {
+                "buttons": ["submit", "clear"]
             }
+
         },
 
         "columns": [
@@ -53,7 +49,7 @@
             }
         },
 
-        "filters": ["gender", "country_id"],
+        "filters": ["gender", "country_id", "date_of_birth", "first_name_eng", "first_name_div"],
         "per_page": 11,
         "lang": ["en", "dv"]
     }
