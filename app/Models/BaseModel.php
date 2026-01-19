@@ -427,6 +427,38 @@ abstract class BaseModel extends Model
         return $query;
     }
 
+    public static function parseWithRelations(Model $model, ?string $relations): array
+    {
+        if ($relations === null || trim($relations) === '') {
+            return [];
+        }
+
+        $result = [];
+
+        foreach (explode(',', $relations) as $relation) {
+            [$name] = array_pad(explode(':', $relation, 2), 2, null);
+            $name = is_string($name) ? trim($name) : '';
+
+            if ($name === '') {
+                continue;
+            }
+
+            if (method_exists($model, $name)) {
+                try {
+                    $rel = $model->{$name}();
+                } catch (\Throwable $e) {
+                    $rel = null;
+                }
+
+                if ($rel instanceof \Illuminate\Database\Eloquent\Relations\Relation) {
+                    $result[] = $name;
+                }
+            }
+        }
+
+        return array_values(array_unique($result));
+    }
+
     /* -------------------------
      |  Helpers
      |--------------------------*/

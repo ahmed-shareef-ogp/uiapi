@@ -612,7 +612,7 @@ class ComponentConfigService
                     }
                     $columnsParam = $itemValue.','.$itemTitle;
                     $sortParam = $itemTitle;
-                    $filter['url'] = url("/api/{$relatedModelName}").'?columns='.$columnsParam.'&sort='.$sortParam.'&pagination=off&wrap=data';
+                    $filter['url'] = url("/api/gapi/{$relatedModelName}").'?columns='.$columnsParam.'&sort='.$sortParam.'&pagination=off&wrap=data';
                 }
             }
             $filters[] = $filter;
@@ -1529,7 +1529,7 @@ class ComponentConfigService
             $withSegments[] = $rel.':'.implode(',', $fields);
         }
 
-        $base = url("/api/{$modelName}");
+        $base = url("/api/gapi/{$modelName}");
 
         $query = 'columns='.implode(',', $tokens);
         if (! empty($withSegments)) {

@@ -1,9 +1,0 @@
-{
-  "settings": {
-    "buttons": [
-      { "name": "submit", "type": "primary", "label": "Submit" },
-      { "name": "clear", "type": "secondary", "label": "Clear" }
-    ],
-    "filters": "on"
-  }
-}
