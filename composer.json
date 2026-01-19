@@ -8,7 +8,8 @@
     "require": {
         "php": "^8.2",
         "laravel/framework": "^12.0",
-        "laravel/tinker": "^2.10.1"
+        "laravel/tinker": "^2.10.1",
+        "ogp/uiapi": "*@dev"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
@@ -73,6 +74,15 @@
             "dont-discover": []
         }
     },
+    "repositories": [
+        {
+            "type": "path",
+            "url": "../uiapi-package",
+            "options": {
+                "symlink": true
+            }
+        }
+    ],
     "config": {
         "optimize-autoloader": true,
         "preferred-install": "dist",
